@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>パーセントバルーン クイズ問題制作ツール ver1.2.2</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --danger-color: #e24a4a;
+            --success-color: #2ecc71;
+            --bg-color: #f5f7fa;
+            --card-color: #ffffff;
+            --input-bg: #ffffff;
+            --input-border: #ccc;
+            --text-sub: #666;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-color);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"], input[type="number"], input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-danger { background-color: var(--danger-color); }
+        .btn-success { background-color: var(--success-color); }
+        .btn-secondary { background-color: #7f8c8d; }
+
+        .image-preview {
+            max-width: 200px;
+            max-height: 150px;
+            margin-top: 10px;
+            display: block;
+            border-radius: 4px;
+        }
+
+        .bg-thumb-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .bg-thumb {
+            position: relative;
+            width: 120px;
+            height: 67.5px; /* 16:9 */
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .bg-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .bg-thumb .delete-bg {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(255,0,0,0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            font-size: 10px;
+            line-height: 20px;
+            text-align: center;
+            padding: 0;
+        }
+
+        .question-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .question-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-left: 5px solid var(--primary-color);
+            margin-bottom: 10px;
+            border-radius: 0 4px 4px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .question-info {
+            flex-grow: 1;
+        }
+
+        .question-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .auth-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .status-online { background: #27ae60; color: #fff; }
+        .status-offline { background: #e24a4a; color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎈 パーセントバルーン クイズ問題制作ツール ver1.2.0</h1>
+    <hr style="margin-bottom: 20px;">
+
+    <div class="card">
+        <h2>☁️ クラウド同期・アカウントログイン (Supabase)</h2>
+        <div id="authContainer"></div>
+    </div>
+
+    <div class="card">
+        <h2>💾 データの保存・読み込み（共同制作対応）</h2>
+        <p style="font-size: 0.9em; color: #666;">
+            ※JSONファイルをインポートする際、既存の問題文と完全に一致するもの、および既に存在する全体背景画像は上書きされず、新要素のみが追記されます。
+        </p>
+        <div class="file-actions">
+            <button class="btn btn-success" onclick="exportJSON()">JSONファイルをダウンロード</button>
+            <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importJSON(this)">
+            <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">JSONファイルをアップロード (追加マージ)</button>
+            <button class="btn btn-secondary" onclick="fetchQuestionsFromSupabase(true)">🔄 クラウドから問題再読み込み</button>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div>
+            <div class="card">
+                <h2>🖼️ 全体共有の背景画像設定 (16:9推奨)</h2>
+                <div class="form-group">
+                    <label>背景画像を追加（複数登録可 / なければ問題毎のものが優先）</label>
+                    <input type="file" id="globalBgInput" accept="image/*" multiple onchange="handleGlobalBg(this)">
+                </div>
+                <div class="bg-thumb-container" id="globalBgThumbs"></div>
+            </div>
+
+            <div class="card">
+                <h2 id="formTitle">📝 問題の新規登録</h2>
+                <form id="quizForm" onsubmit="saveQuestion(event)">
+                    <input type="hidden" id="editIndex" value="-1">
+                    
+                    <div class="form-group">
+                        <label for="questionText">問題文 <span style="color:red;">*必須</span></label>
+                        <input type="text" id="questionText" required placeholder="例：日本人のうち、スマートフォンを使っている人の割合は？">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="answerValue">正解 (%) <span style="color:red;">*必須</span></label>
+                        <input type="number" id="answerValue" required min="0" max="100" placeholder="0 ～ 100">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="qImageInput">イメージ画像 (最大横幅600pxに自動縮小)</label>
+                        <input type="file" id="qImageInput" accept="image/*" onchange="previewImage(this, 'qImagePreview')">
+                        <img id="qImagePreview" class="image-preview" style="display:none;">
+                        <button type="button" class="btn btn-danger btn-secondary" id="clearQImg" style="display:none; margin-top:5px; padding:2px 5px; font-size:12px;" onclick="clearImage('qImageInput', 'qImagePreview', 'clearQImg')">画像を削除</button>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bgImageInput">この問題専用の背景画像 (HD以上は等倍 / 16:9)</label>
+                        <input type="file" id="bgImageInput" accept="image/*" onchange="previewImage(this, 'bgImagePreview', false)">
+                        <img id="bgImagePreview" class="image-preview" style="display:none;">
+                        <button type="button" class="btn btn-danger btn-secondary" id="clearBgImg" style="display:none; margin-top:5px; padding:2px 5px; font-size:12px;" onclick="clearImage('bgImageInput', 'bgImagePreview', 'clearBgImg')">画像を削除</button>
+                    </div>
+
+                    <button type="submit" class="btn" id="submitBtn">登録する</button>
+                    <button type="button" class="btn btn-secondary" id="cancelEditBtn" style="display:none;" onclick="resetForm()">編集をキャンセル</button>
+                </form>
+            </div>
+        </div>
+
+        <div>
+            <div class="card">
+                <h2>📋 登録済み問題一覧 (<span id="qCount">0</span>問)</h2>
+                <ul class="question-list" id="questionList"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Supabaseの設定 ---
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ★管理者（あなた）のメールアドレスを設定
+    const ADMIN_EMAIL = 's50251050@hiroshima-u.ed.jp'; 
+
+    // quiz_data テーブル内の ID
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    // データ構造
+    let quizData = {
+        globalBackgrounds: [],
+        questions: []
+    };
+
+    // 編集時の一時画像キャッシュ
+    let currentQImageBase64 = null;
+    let currentBgImageBase64 = null;
+
+    // 認証ユーザー状態
+    let currentUser = null;
+
+    // 初期化（LocalStorageからの読み込み & Supabase状態確認）
+    window.onload = async function() {
+        loadFromLocalStorage();
+        renderGlobalBackgrounds();
+        renderQuestions();
+        await checkLoginStatus();
+    };
+
+    // 管理者判定ヘルパー関数（大文字小文字の違いを考慮）
+    function checkIsAdmin(user) {
+        if (!user || !user.email) return false;
+        return user.email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
+    }
+
+    // --- Supabase 認証関連 ---
+    async function checkLoginStatus() {
+        const { data: { user } } = await supabaseClient.auth.getUser();
+        currentUser = user;
+        renderAuthUI();
+
+        if (currentUser) {
+            await fetchQuestionsFromSupabase();
+        }
+        // ログイン状態確定後に問題リストを再描画（削除ボタン表示切り替え）
+        renderQuestions();
+    }
+
+    function renderAuthUI() {
+        const container = document.getElementById('authContainer');
+        if (!container) return;
+
+        if (currentUser) {
+            const isAdmin = checkIsAdmin(currentUser);
+            container.innerHTML = `
+                <div class="auth-badge status-online">🟢 ログイン中 (${escapeHtml(currentUser.email)}${isAdmin ? ' / 管理者' : ''})</div>
+                <p style="font-size:0.85rem; color:var(--text-sub); margin-bottom:10px;">クラウド同期が有効です。問題の閲覧・追加・編集が可能です。</p>
+                <button class="btn btn-secondary" onclick="logoutFromSupabase()">ログアウト</button>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="auth-badge status-offline">⚪ オフライン (ローカルのみ)</div>
+                <p style="font-size:0.85rem; color:var(--text-sub); margin-bottom:10px;">クラウドに問題を保存・同期するにはログインが必要です。</p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                    <input type="email" id="authEmail" placeholder="メールアドレス" style="flex:1; min-width:200px;">
+                    <input type="password" id="authPassword" placeholder="パスワード" style="flex:1; min-width:150px;">
+                </div>
+                <button class="btn" onclick="loginToSupabase()">ログインして同期</button>
+            `;
+        }
+    }
+
+    async function loginToSupabase() {
+        const email = document.getElementById('authEmail').value;
+        const password = document.getElementById('authPassword').value;
+
+        if (!email || !password) {
+            alert("メールアドレスとパスワードを入力してください。");
+            return;
+        }
+
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email, password
+        });
+
+        if (error) {
+            alert("ログインに失敗しました: " + error.message);
+        } else {
+            currentUser = data.user;
+            alert("ログインに成功しました。");
+            renderAuthUI();
+            await fetchQuestionsFromSupabase();
+            renderQuestions(); // ログイン成功後に再描画
+        }
+    }
+
+    async function logoutFromSupabase() {
+        await supabaseClient.auth.signOut();
+        currentUser = null;
+        alert("ログアウトしました。");
+        renderAuthUI();
+        renderQuestions();
+    }
+
+    // --- Supabase データ同期処理 (quiz_data テーブルの percent_balloon カラムを使用) ---
+    async function fetchQuestionsFromSupabase(isManual = false) {
+        if (!currentUser) {
+            if (isManual) alert("ログインが必要です。");
+            return;
+        }
+
+        try {
+            const { data, error } = await supabaseClient
+                .from('quiz_data')
+                .select('percent_balloon')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .single();
+
+            if (error && error.code !== 'PGRST116') {
+                console.error("Supabase読み込みエラー:", error);
+                if (isManual) alert("データの取得に失敗しました: " + error.message);
+                return;
+            }
+
+            if (data) {
+                const cloudData = data.percent_balloon;
+                if (cloudData) {
+                    quizData = typeof cloudData === 'string' ? JSON.parse(cloudData) : cloudData;
+                    if (!quizData.globalBackgrounds) quizData.globalBackgrounds = [];
+                    if (!quizData.questions) quizData.questions = [];
+                    saveToLocalStorage();
+                    renderGlobalBackgrounds();
+                    renderQuestions();
+                    if (isManual) alert("クラウドから最新の問題を取得しました。");
+                } else {
+                    if (isManual) alert("クラウドに保存された問題はありませんでした。");
+                }
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function syncAllToSupabase() {
+        if (!currentUser) return true;
+
+        const { error } = await supabaseClient
+            .from('quiz_data')
+            .upsert({
+                id: QUIZ_DATA_ROW_ID,
+                percent_balloon: quizData,
+                created_by: currentUser.id
+            }, { onConflict: 'id' });
+
+        if (error) {
+            alert("クラウドへの保存に失敗しました: " + error.message);
+            return false;
+        }
+        return true;
+    }
+
+    // データをLocalStorageに読み込み・保存
+    function loadFromLocalStorage() {
+        const localData = localStorage.getItem('balloon_quiz_data');
+        if (localData) {
+            try {
+                quizData = JSON.parse(localData);
+                if(!quizData.globalBackgrounds) quizData.globalBackgrounds = [];
+                if(!quizData.questions) quizData.questions = [];
+            } catch (e) {
+                console.error("データ読み込み失敗", e);
+            }
+        }
+    }
+
+    function saveToLocalStorage() {
+        localStorage.setItem('balloon_quiz_data', JSON.stringify(quizData));
+        document.getElementById('qCount').innerText = quizData.questions.length;
+    }
+
+    // 画像の処理（問題画像は600pxにリサイズ、背景はそのままBase64化）
+    function previewImage(input, previewId, resize = true) {
+        const preview = document.getElementById(previewId);
+        const clearBtn = document.getElementById(previewId === 'qImagePreview' ? 'clearQImg' : 'clearBgImg');
+        const file = input.files[0];
+
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                if (resize) {
+                    // 問題イメージ：600px以下にリサイズ
+                    const img = new Image();
+                    img.onload = function() {
+                        const maxWidth = 600;
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                        preview.src = compressedBase64;
+                        preview.style.display = 'block';
+                        clearBtn.style.display = 'inline-block';
+                        if(previewId === 'qImagePreview') currentQImageBase64 = compressedBase64;
+                    };
+                    img.src = e.target.result;
+                } else {
+                    // 背景画像：圧縮なしでそのまま保持
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                    clearBtn.style.display = 'inline-block';
+                    currentBgImageBase64 = e.target.result;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function clearImage(inputId, previewId, btnId) {
+        document.getElementById(inputId).value = "";
+        document.getElementById(previewId).src = "";
+        document.getElementById(previewId).style.display = "none";
+        document.getElementById(btnId).style.display = "none";
+        if(previewId === 'qImagePreview') currentQImageBase64 = null;
+        if(previewId === 'bgImagePreview') currentBgImageBase64 = null;
+    }
+
+    // 全体背景画像の追加処理
+    async function handleGlobalBg(input) {
+        const files = input.files;
+        if (!files.length) return;
+
+        let processedCount = 0;
+        for (let i = 0; i < files.length; i++) {
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const img = new Image();
+                img.onload = async function() {
+                    // 背景画像：最大横幅1280pxにリサイズして容量削減（LocalStorage制限対策）
+                    const maxWidth = 1280;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // JPEG形式で適度に圧縮
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.80);
+
+                    // 重複していなければ追加
+                    if (!quizData.globalBackgrounds.includes(compressedBase64)) {
+                        quizData.globalBackgrounds.push(compressedBase64);
+                    }
+                    
+                    processedCount++;
+                    if (processedCount === files.length) {
+                        input.value = '';
+                        await syncAllToSupabase();
+                        saveToLocalStorage();
+                        renderGlobalBackgrounds();
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(files[i]);
+        }
+    }
+
+    // 全体背景の描画
+    function renderGlobalBackgrounds() {
+        const container = document.getElementById('globalBgThumbs');
+        container.innerHTML = '';
+        quizData.globalBackgrounds.forEach((bg, index) => {
+            const div = document.createElement('div');
+            div.className = 'bg-thumb';
+            div.innerHTML = `
+                <img src="${bg}">
+                <button class="delete-bg" onclick="deleteGlobalBg(${index})">✕</button>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    async function deleteGlobalBg(index) {
+        if(confirm("この全体背景画像を削除しますか？")) {
+            quizData.globalBackgrounds.splice(index, 1);
+            const success = await syncAllToSupabase();
+            if (!success) return;
+            saveToLocalStorage();
+            renderGlobalBackgrounds();
+        }
+    }
+
+    // 問題の保存（新規・編集）
+    async function saveQuestion(e) {
+        e.preventDefault();
+        const index = parseInt(document.getElementById('editIndex').value);
+        const questionText = document.getElementById('questionText').value.trim();
+        const answerValue = parseInt(document.getElementById('answerValue').value);
+
+        const existingItem = (index !== -1) ? quizData.questions[index] : {};
+
+        const questionItem = {
+            id: existingItem.id || 'balloon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            question: questionText,
+            answer: answerValue,
+            image: currentQImageBase64,
+            background: currentBgImageBase64,
+            created_by: existingItem.created_by || (currentUser ? currentUser.id : null)
+        };
+
+        if (index === -1) {
+            // 新規登録
+            quizData.questions.push(questionItem);
+        } else {
+            // 編集上書き
+            quizData.questions[index] = questionItem;
+        }
+
+        const success = await syncAllToSupabase();
+        if (!success) return;
+
+        saveToLocalStorage();
+        renderQuestions();
+        resetForm();
+    }
+
+    // 問題一覧の描画
+    function renderQuestions() {
+        const list = document.getElementById('questionList');
+        list.innerHTML = '';
+        document.getElementById('qCount').innerText = quizData.questions.length;
+
+        const isAdmin = checkIsAdmin(currentUser);
+
+        quizData.questions.forEach((q, index) => {
+            // 削除権限判定（管理者または制作者本人のみ）
+            const canDelete = currentUser && (
+                isAdmin ||
+                (q.created_by && q.created_by === currentUser.id)
+            );
+
+            const li = document.createElement('li');
+            li.className = 'question-item';
+            li.innerHTML = `
+                <div class="question-info">
+                    <strong>Q.${index + 1}: ${escapeHtml(q.question)}</strong><br>
+                    <span style="color: #e67e22; font-weight:bold;">正解: ${q.answer}%</span> 
+                    ${q.image ? '🖼️画像有' : ''} ${q.background ? '🌌個別背景有' : ''}
+                </div>
+                <div class="question-actions">
+                    <button class="btn" id="editBtn-${index}" onclick="editQuestion(${index})">編集</button>
+                    ${canDelete ? `
+                        <button class="btn btn-danger" onclick="deleteQuestion(${index})">削除</button>
+                    ` : ''}
+                </div>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    // 編集モード移行
+    function editQuestion(index) {
+        const q = quizData.questions[index];
+        document.getElementById('editIndex').value = index;
+        document.getElementById('questionText').value = q.question;
+        document.getElementById('answerValue').value = q.answer;
+        
+        // 画像の展開
+        if (q.image) {
+            document.getElementById('qImagePreview').src = q.image;
+            document.getElementById('qImagePreview').style.display = 'block';
+            document.getElementById('clearQImg').style.display = 'inline-block';
+            currentQImageBase64 = q.image;
+        } else {
+            clearImage('qImageInput', 'qImagePreview', 'clearQImg');
+        }
+
+        if (q.background) {
+            document.getElementById('bgImagePreview').src = q.background;
+            document.getElementById('bgImagePreview').style.display = 'block';
+            document.getElementById('clearBgImg').style.display = 'inline-block';
+            currentBgImageBase64 = q.background;
+        } else {
+            clearImage('bgImageInput', 'bgImagePreview', 'clearBgImg');
+        }
+
+        document.getElementById('formTitle').innerText = `📝 問題の編集 (No.${index + 1})`;
+        document.getElementById('submitBtn').innerText = "更新する";
+        document.getElementById('cancelEditBtn').style.display = "inline-block";
+        window.scrollTo({top: document.getElementById('quizForm').offsetTop, behavior: 'smooth'});
+    }
+
+    async function deleteQuestion(index) {
+        if (confirm(`問題 No.${index + 1} を削除しますか？`)) {
+            quizData.questions.splice(index, 1);
+            const success = await syncAllToSupabase();
+            if (!success) return;
+            saveToLocalStorage();
+            renderQuestions();
+            resetForm();
+        }
+    }
+
+    function resetForm() {
+        document.getElementById('editIndex').value = "-1";
+        document.getElementById('quizForm').reset();
+        clearImage('qImageInput', 'qImagePreview', 'clearQImg');
+        clearImage('bgImageInput', 'bgImagePreview', 'clearBgImg');
+        document.getElementById('formTitle').innerText = "📝 問題の新規登録";
+        document.getElementById('submitBtn').innerText = "登録する";
+        document.getElementById('cancelEditBtn').style.display = "none";
+    }
+
+    // JSONエクスポート
+    function exportJSON() {
+        if (quizData.questions.length === 0 && quizData.globalBackgrounds.length === 0) {
+            alert("エクスポートするデータがありません。");
+            return;
+        }
+        const dataStr = JSON.stringify(quizData, null, 2);
+        const blob = new Blob([dataStr], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `balloon_quiz_data_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // JSONインポート (マージ処理)
+    function importJSON(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                let addedQuestions = 0;
+                let addedBgs = 0;
+
+                // 全体背景のマージ（重複チェック）
+                if (imported.globalBackgrounds && Array.isArray(imported.globalBackgrounds)) {
+                    imported.globalBackgrounds.forEach(bg => {
+                        if (!quizData.globalBackgrounds.includes(bg)) {
+                            quizData.globalBackgrounds.push(bg);
+                            addedBgs++;
+                        }
+                    });
+                }
+
+                // 問題のマージ（問題文が完全に一致するものはスキップ）
+                if (imported.questions && Array.isArray(imported.questions)) {
+                    imported.questions.forEach(item => {
+                        const isDuplicate = quizData.questions.some(q => q.question === item.question);
+                        if (!isDuplicate) {
+                            quizData.questions.push({
+                                ...item,
+                                created_by: currentUser ? currentUser.id : null
+                            });
+                            addedQuestions++;
+                        }
+                    });
+                }
+
+                await syncAllToSupabase();
+                saveToLocalStorage();
+                renderGlobalBackgrounds();
+                renderQuestions();
+                
+                alert(`インポートが完了しました！\n・新しく追加された問題: ${addedQuestions}件\n・新しく追加された共通背景: ${addedBgs}件\n(既存の要素は保持されました)`);
+                input.value = '';
+            } catch (err) {
+                alert("JSONファイルの解析に失敗しました。正しいフォーマットか確認してください。");
+                console.error(err);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // エスケープ処理
+    function escapeHtml(str) {
+        if(!str) return "";
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+</script>
+
+</body>
+</html>
