@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ファイブリーグ - 回答用システム</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary-blue: #00b4d8;
+            --primary-dark: #0077b6;
+            --accent-red: #ff4d6d;
+            --accent-blue: #0077b6;
+            --status-left-bg: #37474f;
+            --status-left-text: #00e5ff;
+            --status-right-bg: #000000;
+            --status-right-text: #ffff00;
+            /* 薄い銅色 */
+            --light-bronze: #c88b68;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+
+        /* --- 設定画面 --- */
+        #setupScreen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .setup-card {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 35px 45px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 520px;
+            max-width: 90%;
+        }
+
+        .setup-card h1 {
+            text-align: center;
+            color: var(--primary-dark);
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+
+        .ls-status {
+            font-size: 0.95rem;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 6px;
+            background: #f0f4f8;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .form-group select, .form-group input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 20px;
+        }
+
+        .radio-group label {
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+        .btn-start {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--accent-red);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+
+        .btn-start:hover {
+            background-color: #d90429;
+        }
+
+        /* --- ゲーム画面 --- */
+        #gameScreen {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: none;
+        }
+
+        /* ステータス表示 */
+        .status-left {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: var(--status-left-bg);
+            color: var(--status-left-text);
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 1.4rem;
+            font-weight: bold;
+            border: 2px solid var(--primary-blue);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .status-right {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: var(--status-right-bg);
+            color: var(--status-right-text);
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 1.4rem;
+            font-weight: bold;
+            border: 2px solid #ffd600;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        /* 問題開始時の「x問目」オーバーレイ */
+        #stageOverlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 500;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+
+        #stageOverlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #stageText {
+            font-size: 6rem;
+            font-weight: 900;
+            color: var(--accent-red);
+            text-shadow: 0 0 20px rgba(255,77,109,0.8), 4px 4px 0px #000;
+        }
+
+        /* 中央回答表示エリア */
+        #centerArea {
+            position: absolute;
+            top: 38%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 50px;
+            width: 95%;
+            max-width: 1300px;
+        }
+
+        #preImageContainer {
+            display: none;
+            max-width: 450px;
+            max-height: 380px;
+            background: rgba(0,0,0,0.5);
+            border: 4px solid #fff;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #preImageContainer img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        .input-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .player-label {
+            font-size: 1.6rem;
+            font-weight: bold;
+            color: #fff;
+            background: rgba(0,0,0,0.7);
+            padding: 6px 24px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+            border: 1px solid var(--primary-blue);
+        }
+
+        /* 水色回答正方形ボックス */
+        .answer-box {
+            width: 416px;
+            height: 416px;
+            background-color: var(--primary-blue);
+            border: 10px solid #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* パスワード属性(type="password")でドット表示・変換無効化 */
+        .answer-input {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            border: none;
+            outline: none;
+            text-align: center;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 9.6rem;
+        }
+
+        .char-type-info {
+            margin-top: 12px;
+            font-size: 1.2rem;
+            background: rgba(0,0,0,0.8);
+            color: #80deea;
+            padding: 6px 20px;
+            border-radius: 8px;
+            border: 1px solid #00b4d8;
+            text-align: center;
+        }
+
+        .space-notice {
+            margin-top: 6px;
+            font-size: 0.95rem;
+            color: #ffb74d;
+            background: rgba(0,0,0,0.7);
+            padding: 4px 12px;
+            border-radius: 6px;
+        }
+
+        .error-msg {
+            color: #ff4d6d;
+            font-weight: bold;
+            margin-top: 8px;
+            font-size: 1.1rem;
+            background: rgba(0,0,0,0.85);
+            padding: 6px 16px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        /* 画面下問題文エリア */
+        #questionBox {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 85%;
+            max-width: 1100px;
+            background: rgba(0, 180, 216, 0.85);
+            border: 4px solid var(--light-bronze);
+            border-radius: 12px;
+            padding: 20px 30px;
+            text-align: center;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.7);
+        }
+
+        #questionText {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #ffffff;
+            line-height: 1.4;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 全員回答後の結果表示 */
+        #resultArea {
+            position: absolute;
+            bottom: 155px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            z-index: 20;
+        }
+
+        .result-boxes {
+            display: flex;
+            gap: 15px;
+        }
+
+        .result-box {
+            width: 110px;
+            height: 110px;
+            border: 4px solid #ffffff;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #ffffff;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.5);
+            background-color: var(--primary-blue);
+            transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .result-box.correct {
+            background-color: var(--accent-red) !important;
+            border-color: #ffb3c1;
+        }
+
+        .result-box.incorrect {
+            background-color: var(--accent-blue) !important;
+            border-color: #90e0ef;
+        }
+
+        /* 右下の正解表示（不正解時） */
+        #correctAnswerNotice {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background-color: var(--accent-red);
+            border: 4px solid #ffb3c1;
+            border-radius: 12px;
+            padding: 12px 24px;
+            color: #ffffff;
+            font-size: 1.8rem;
+            font-weight: bold;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+            z-index: 30;
+            display: none;
+            letter-spacing: 2px;
+        }
+
+        /* 回答後画像オーバーレイ */
+        #postImageModal {
+            display: none;
+            position: absolute;
+            top: 32%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
+            border-radius: 16px;
+            border: 3px solid var(--primary-blue);
+            z-index: 15;
+            max-width: 80vw;
+            max-height: 38vh;
+            text-align: center;
+        }
+
+        #postImageModal img {
+            max-width: 100%;
+            max-height: 32vh;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+
+        .game-ctrl-btn {
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: var(--accent-red);
+            color: white;
+            border: 2px solid white;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            transition: transform 0.2s;
+        }
+
+        .game-ctrl-btn:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="setupScreen">
+        <div class="setup-card">
+            <h1>ファイブリーグ 回答設定</h1>
+            
+            <div id="lsStatus" class="ls-status">Supabase・ローカルストレージを確認中...</div>
+
+            <div class="form-group">
+                <label for="jsonFile">問題JSONの読み込み (ファイル指定時)</label>
+                <input type="file" id="jsonFile" accept=".json">
+            </div>
+            <div class="form-group">
+                <label for="playerCount">プレイヤー人数</label>
+                <select id="playerCount">
+                    <option value="1">1人</option>
+                    <option value="2">2人</option>
+                    <option value="3">3人</option>
+                    <option value="4">4人</option>
+                    <option value="5" selected>5人</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>背景画像モード</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="bgMode" value="order" checked> 順番通り</label>
+                    <label><input type="radio" name="bgMode" value="random"> ランダム</label>
+                </div>
+            </div>
+            <button class="btn-start" onclick="startGame()">スタート！</button>
+        </div>
+    </div>
+
+    <div id="gameScreen">
+        <div class="status-left" id="charStatus">1文字目</div>
+        <div class="status-right" id="qStatus">第 1 問</div>
+
+        <div id="stageOverlay">
+            <div id="stageText">1問目</div>
+        </div>
+
+        <div id="centerArea">
+            <div id="preImageContainer">
+                <img id="preImg" src="" alt="回答前画像">
+            </div>
+            <div class="input-wrapper" id="inputWrapper">
+                <div class="player-label" id="playerLabel">1人目の解答</div>
+                <div class="answer-box">
+                    <input type="password" id="answerInput" class="answer-input" autofocus oninput="onInputChar(this)">
+                </div>
+                <div class="char-type-info" id="charTypeInfo">入力タイプ: ローマ字/数字</div>
+                <div class="space-notice">※ローマ字で入力（キー入力を半角英数で受け付けます）</div>
+                <div class="error-msg" id="errorMsg">正しい文字種で入力してください</div>
+            </div>
+        </div>
+
+        <div id="resultArea">
+            <div class="result-boxes" id="resultBoxes">
+                <div class="result-box"></div>
+                <div class="result-box"></div>
+                <div class="result-box"></div>
+                <div class="result-box"></div>
+                <div class="result-box"></div>
+            </div>
+            <div id="resultControl" style="margin-top: 10px;"></div>
+        </div>
+
+        <div id="correctAnswerNotice">答え ○○○○○</div>
+
+        <div id="postImageModal">
+            <img id="postImg" src="" alt="回答後画像">
+        </div>
+
+        <div id="questionBox">
+            <div id="questionText">問題文がここに表示されます</div>
+        </div>
+    </div>
+
+<script>
+    // --- Supabase設定 ---
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    let questionsData = [];
+    let bgImagesData = [];
+    let playerCount = 5;
+    let bgMode = 'order';
+    let localDataFound = null;
+
+    let currentQIndex = 0;
+    let currentCharIndex = 0;
+    let userAnswers = [];
+
+    const playerRotation = {
+        1: [1, 1, 1, 1, 1],
+        2: [1, 2, 1, 2, 1],
+        3: [1, 2, 3, 1, 2],
+        4: [1, 2, 3, 4, 1],
+        5: [1, 2, 3, 4, 5]
+    };
+
+    // 漢字変換等のダミー辞書
+    const dummyKanjiMap = {
+        'まち': '街', 'みち': '道', 'うみ': '海', 'やま': '山', 'かわ': '川',
+        'ねこ': '猫', 'いぬ': '犬', 'はな': '花', 'てん': '天', 'くう': '空'
+    };
+
+    // ローマ字 -> ひらがな 変換テーブル（長音・拗音対応）
+    const romajiMap = [
+        ["kya","きゃ"],["kyu","きゅ"],["kyo","きょ"],
+        ["sha","しゃ"],["shu","しゅ"],["sho","しょ"],["sya","しゃ"],["syu","しゅ"],["syo","しょ"],
+        ["cha","ちゃ"],["chu","ちゅ"],["cho","ちょ"],["tya","ちゃ"],["tyu","ちゅ"],["tyo","ちょ"],
+        ["nya","にゃ"],["nyu","にゅ"],["nyo","にょ"],
+        ["hya","ひゃ"],["hyu","ひゅ"],["hyo","ひょ"],
+        ["mya","みゃ"],["myu","みゅ"],["myo","みょ"],
+        ["rya","りゃ"],["ryu","りゅ"],["ryo","りょ"],
+        ["gya","ぎゃ"],["gyu","ぎゅ"],["gyo","ぎょ"],["bya","びゃ"],["byu","びゅ"],["byo","びょ"],
+        ["pya","ぴゃ"],["pyu","ぴゅ"],["pyo","ぴょ"],
+        ["jya","じゃ"],["jyu","じゅ"],["jyo","じょ"],["ja","じゃ"],["ju","じゅ"],["jo","じょ"],
+        ["dha","でゃ"],["dhi","でぃ"],["dhu","でゅ"],["dhe","でぇ"],["dho","でょ"],
+        ["tha","てゃ"],["thi","てぃ"],["thu","てゅ"],["the","てぇ"],["tho","てょ"],
+        ["fa","ふぁ"],["fi","ふぃ"],["fe","ふぇ"],["fo","ふぉ"],
+        ["va","ゔぁ"],["vi","ゔぃ"],["vu","ゔ"],["ve","ゔぇ"],["vo","ゔぉ"],
+        ["ka","か"],["ki","き"],["ku","く"],["ke","け"],["ko","こ"],
+        ["sa","さ"],["shi","し"],["si","し"],["su","す"],["se","せ"],["so","そ"],
+        ["ta","た"],["chi","ち"],["ti","ち"],["tsu","つ"],["tu","つ"],["te","て"],["to","と"],
+        ["na","な"],["ni","に"],["nu","ぬ"],["ne","ね"],["no","の"],
+        ["ha","は"],["hi","ひ"],["fu","ふ"],["hu","ふ"],["he","へ"],["ho","ほ"],
+        ["ma","ま"],["mi","み"],["mu","む"],["me","め"],["mo","も"],
+        ["ya","や"],["yu","ゆ"],["yo","よ"],
+        ["ra","ら"],["ri","り"],["ru","る"],["re","れ"],["ro","ろ"],
+        ["wa","わ"],["wo","を"],["nn","ん"],["n","ん"],
+        ["ga","が"],["gi","ぎ"],["gu","ぐ"],["ge","げ"],["go","ご"],
+        ["za","ざ"],["ji","じ"],["zi","じ"],["zu","ず"],["ze","ぜ"],["zo","ぞ"],
+        ["da","だ"],["di","ぢ"],["du","づ"],["de","で"],["do","ど"],
+        ["ba","ば"],["bi","び"],["bu","ぶ"],["be","べ"],["bo","ぼ"],
+        ["pa","ぱ"],["pi","ぴ"],["pu","ぷ"],["pe","ぺ"],["po","ぽ"],
+        ["a","あ"],["i","い"],["u","う"],["e","え"],["o","お"],
+        ["xa","ぁ"],["xi","ぃ"],["xu","ぅ"],["xe","ぇ"],["xo","ぉ"],
+        ["la","ぁ"],["li","ぃ"],["lu","ぅ"],["le","ぇ"],["lo","ぉ"],
+        ["xya","ゃ"],["xyu","ゅ"],["xyo","ょ"],
+        ["lya","ゃ"],["lyu","ゅ"],["lyo","ょ"],
+        ["xtu","っ"],["ltu","っ"],["-","ー"]
+    ];
+
+    function romajiToHira(str) {
+        if (!str) return '';
+        let s = str.toLowerCase();
+        // nnが「っん」にならないよう、促音（っ）判定の連続子音からnを除外
+        s = s.replace(/([bcdfghjklmpqrstvwxz])\1/g, 'っ$1');
+        for (let [rom, hira] of romajiMap) {
+            s = s.replace(new RegExp(rom, 'g'), hira);
+        }
+        return s;
+    }
+
+    function hiraToRomajiCandidates(hiraChar) {
+        let results = [];
+        for (let [rom, h] of romajiMap) {
+            if (h === hiraChar) {
+                results.push(rom);
+            }
+        }
+        if (results.length === 0) {
+            results.push(hiraChar);
+        }
+        return results;
+    }
+
+    // 配列をシャッフルする関数 (Fisher-Yates)
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        checkLocalStorageData();
+    });
+
+    async function checkLocalStorageData() {
+        const lsStatus = document.getElementById('lsStatus');
+        lsStatus.innerText = '☁️ Supabaseから問題データを読み込んでいます...';
+
+        // 1. Supabaseのquiz_dataテーブル (five_leagueカラム) からデータ取得を試行
+        try {
+            const { data, error } = await supabaseClient
+                .from('quiz_data')
+                .select('five_league')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .single();
+
+            if (!error && data && data.five_league && isValidQuizData(data.five_league)) {
+                localDataFound = data.five_league;
+                const qCount = Array.isArray(data.five_league) 
+                    ? data.five_league.length 
+                    : (data.five_league.questions ? data.five_league.questions.length : 0);
+                
+                lsStatus.innerText = `[クラウド同期] Supabaseの問題データ (${qCount}問) が準備完了です`;
+                lsStatus.style.color = '#0077b6';
+                lsStatus.style.backgroundColor = '#e0f7fa';
+                return;
+            }
+        } catch (e) {
+            console.warn('Supabaseからの読み込みに失敗、ローカルストレージを確認します:', e);
+        }
+
+        // 2. Supabaseで取得できない場合はローカルストレージをフォールバックとして確認
+        const possibleKeys = ['fiveLeagueData', 'fiveLeagueQuestions', 'fiveLeagueQuizData', 'quizData'];
+        let found = null;
+
+        for (let k of possibleKeys) {
+            const str = localStorage.getItem(k);
+            if (str) {
+                try {
+                    const parsed = JSON.parse(str);
+                    if (isValidQuizData(parsed)) {
+                        found = parsed;
+                        break;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        if (!found) {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                try {
+                    const parsed = JSON.parse(localStorage.getItem(k));
+                    if (isValidQuizData(parsed)) {
+                        found = parsed;
+                        break;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        if (found) {
+            localDataFound = found;
+            const qCount = Array.isArray(found) ? found.length : (found.questions ? found.questions.length : 0);
+            lsStatus.innerText = `[自動検出] ローカルストレージの問題データ (${qCount}問) が準備完了です`;
+            lsStatus.style.color = '#0077b6';
+            lsStatus.style.backgroundColor = '#e0f7fa';
+        } else {
+            lsStatus.innerText = `保存データがありません。JSONファイルを選択してください。`;
+            lsStatus.style.color = '#d90429';
+            lsStatus.style.backgroundColor = '#ffe5e5';
+        }
+    }
+
+    function isValidQuizData(data) {
+        if (Array.isArray(data) && data.length > 0 && data[0].questionText) return true;
+        if (data && Array.isArray(data.questions) && data.questions.length > 0 && data.questions[0].questionText) return true;
+        return false;
+    }
+
+    function toHalfWidth(str) {
+        return str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
+    }
+
+    function hiraToKata(str) {
+        return str.replace(/[\u3041-\u3096]/g, (s) => String.fromCharCode(s.charCodeAt(0) + 0x60));
+    }
+
+    function kataToHira(str) {
+        return str.replace(/[\u30a1-\u30f6]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0x60));
+    }
+
+    function initGameWithData(imported) {
+        if (Array.isArray(imported)) {
+            questionsData = imported;
+            bgImagesData = [];
+        } else if (typeof imported === 'object' && imported !== null) {
+            questionsData = imported.questions || [];
+            bgImagesData = imported.bgImages || [];
+        }
+
+        if (questionsData.length === 0) {
+            alert('問題データが含まれていません。');
+            return;
+        }
+
+        // 出題順をランダムにする処理を追加
+        shuffleArray(questionsData);
+
+        document.getElementById('setupScreen').style.display = 'none';
+        document.getElementById('gameScreen').style.display = 'block';
+
+        currentQIndex = 0;
+        loadQuestion(currentQIndex);
+    }
+
+    function startGame() {
+        const fileInput = document.getElementById('jsonFile');
+        playerCount = parseInt(document.getElementById('playerCount').value);
+        bgMode = document.querySelector('input[name="bgMode"]:checked').value;
+
+        if (fileInput.files.length > 0) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    initGameWithData(imported);
+                } catch (err) {
+                    alert('JSONの解析に失敗しました。');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(fileInput.files[0]);
+            return;
+        }
+
+        if (localDataFound) {
+            initGameWithData(localDataFound);
+            return;
+        }
+
+        alert('問題JSONファイルを読み込むか、制作ツールで問題データを作成してください。');
+    }
+
+    function loadQuestion(index) {
+        const q = questionsData[index];
+        currentCharIndex = 0;
+        userAnswers = [];
+
+        document.getElementById('resultArea').style.display = 'none';
+        document.getElementById('correctAnswerNotice').style.display = 'none';
+        document.getElementById('postImageModal').style.display = 'none';
+        document.getElementById('centerArea').style.display = 'flex';
+        document.getElementById('errorMsg').style.display = 'none';
+
+        document.getElementById('qStatus').innerText = `第 ${index + 1} 問`;
+
+        setScreenBackground();
+
+        const overlay = document.getElementById('stageOverlay');
+        document.getElementById('stageText').innerText = `${index + 1}問目`;
+        overlay.classList.add('active');
+
+        setTimeout(() => {
+            overlay.classList.remove('active');
+            setupInputForChar();
+        }, 1500);
+
+        document.getElementById('questionText').innerText = q.questionText;
+
+        const preContainer = document.getElementById('preImageContainer');
+        const preImg = document.getElementById('preImg');
+        if (q.preImage) {
+            preImg.src = q.preImage;
+            preContainer.style.display = 'block';
+        } else {
+            preContainer.style.display = 'none';
+        }
+
+        document.getElementById('charTypeInfo').innerText = `入力タイプ: ローマ字 / 数字`;
+    }
+
+    function setScreenBackground() {
+        const gameScreen = document.getElementById('gameScreen');
+        if (bgImagesData && bgImagesData.length > 0) {
+            let bgUrl = '';
+            if (bgMode === 'random') {
+                const randIdx = Math.floor(Math.random() * bgImagesData.length);
+                bgUrl = bgImagesData[randIdx].url;
+            } else {
+                bgUrl = bgImagesData[currentQIndex % bgImagesData.length].url;
+            }
+            gameScreen.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url(${bgUrl})`;
+        } else {
+            gameScreen.style.backgroundImage = 'linear-gradient(135deg, #1f4037, #99f2c8)';
+        }
+    }
+
+    function setupInputForChar() {
+        document.getElementById('charStatus').innerText = `${currentCharIndex + 1}枠目`;
+
+        const currentPlayer = playerRotation[playerCount][currentCharIndex];
+        document.getElementById('playerLabel').innerText = `${currentPlayer}人目の解答`;
+
+        const input = document.getElementById('answerInput');
+        input.value = '';
+        input.focus();
+    }
+
+    function onInputChar(input) {
+        // パスワード入力用のUIスケール
+    }
+
+    document.getElementById('answerInput').addEventListener('keydown', (e) => {
+        if (e.key === ' ' || e.code === 'Space') {
+            e.preventDefault();
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submitChar();
+        }
+    });
+
+    function submitChar() {
+        const input = document.getElementById('answerInput');
+        let rawVal = input.value.trim();
+
+        if (!rawVal) return;
+
+        rawVal = toHalfWidth(rawVal).toLowerCase();
+
+        const errorMsg = document.getElementById('errorMsg');
+        errorMsg.style.display = 'none';
+
+        userAnswers.push(rawVal);
+
+        currentCharIndex++;
+
+        if (currentCharIndex < 5) {
+            setupInputForChar();
+        } else {
+            showResults();
+        }
+    }
+
+    function getFuriganaArray(q, isAlt = false, altIdx = 0) {
+        let fStr = '';
+        if (isAlt) {
+            if (q.altFuriganas && q.altFuriganas[altIdx]) {
+                fStr = q.altFuriganas[altIdx];
+            } else if (q.altAnswers && q.altAnswers[altIdx]) {
+                fStr = q.altAnswers[altIdx];
+            }
+        } else {
+            fStr = q.furigana || q.mainAnswer || '';
+        }
+
+        if (Array.isArray(fStr)) return fStr.map(s => kataToHira(toHalfWidth(s)));
+        
+        fStr = kataToHira(toHalfWidth(fStr));
+        if (fStr.length === 5) {
+            return fStr.split('');
+        }
+        let arr = fStr.split('');
+        while (arr.length < 5) arr.push('');
+        return arr;
+    }
+
+    function getMainDisplayArray(q, isAlt = false, altIdx = 0) {
+        let target = isAlt ? (q.altAnswers[altIdx] || '') : (q.mainAnswer || '');
+        if (Array.isArray(target)) return target;
+        let arr = target.split('');
+        while (arr.length < 5) arr.push('');
+        return arr;
+    }
+
+    function checkSingleCharMatch(userIn, targetFuriChar) {
+        if (!userIn || !targetFuriChar) return false;
+
+        const userHira = romajiToHira(userIn);
+        if (userIn === targetFuriChar || userHira === targetFuriChar) {
+            return true;
+        }
+
+        const romCandidates = hiraToRomajiCandidates(targetFuriChar);
+        if (romCandidates.includes(userIn)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    function showResults() {
+        document.getElementById('centerArea').style.display = 'none';
+        const resultArea = document.getElementById('resultArea');
+        const resultBoxes = document.querySelectorAll('.result-box');
+        const q = questionsData[currentQIndex];
+
+        // 各枠（各プレイヤー）ごとに独立して判定を行う関数
+        function evaluateAgainstFuriganaList(furiList) {
+            let matches = [];
+            let correctCount = 0;
+
+            for (let i = 0; i < 5; i++) {
+                const userIn = userAnswers[i] || '';
+                const targetFuri = furiList[i] || '';
+
+                const match = checkSingleCharMatch(userIn, targetFuri);
+
+                matches.push(match);
+                if (match) correctCount++;
+            }
+            return { isAllPerfect: correctCount === 5, correctCount, matches };
+        }
+
+        // 主解答の照合
+        const mainFuriList = getFuriganaArray(q, false);
+        let evalResult = evaluateAgainstFuriganaList(mainFuriList);
+        let isPerfect = evalResult.isAllPerfect;
+        let matchedAltIndex = -1;
+
+        // 別解の照合（正解数がより多くなる別解があればそれを採用）
+        if (!isPerfect && q.altAnswers && q.altAnswers.length > 0) {
+            for (let altIdx = 0; altIdx < q.altAnswers.length; altIdx++) {
+                const altFuriList = getFuriganaArray(q, true, altIdx);
+                const altEval = evaluateAgainstFuriganaList(altFuriList);
+                
+                if (altEval.correctCount > evalResult.correctCount) {
+                    evalResult = altEval;
+                    matchedAltIndex = altIdx;
+                    if (altEval.isAllPerfect) {
+                        isPerfect = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        const targetDisplayArr = (matchedAltIndex >= 0) 
+            ? getMainDisplayArray(q, true, matchedAltIndex) 
+            : getMainDisplayArray(q, false);
+
+        let allCorrect = true;
+
+        // 枠ごとに独立した判定結果に基づいて描画
+        resultBoxes.forEach((box, i) => {
+            box.className = 'result-box';
+            const userIn = userAnswers[i] || '';
+            const userInHira = romajiToHira(userIn) || userIn;
+            const correctTargetChar = targetDisplayArr[i] || '';
+
+            const isCharCorrect = evalResult.matches[i];
+
+            if (isCharCorrect) {
+                box.innerText = correctTargetChar;
+                box.classList.add('correct');
+            } else {
+                allCorrect = false;
+                box.classList.add('incorrect');
+
+                if (/[\u30A1-\u30FA\u30FC]/.test(correctTargetChar)) {
+                    box.innerText = hiraToKata(userInHira);
+                } 
+                else if (/[\u4E00-\u9FFF\u3400-\u4DBF\u3005]/.test(correctTargetChar)) {
+                    if (dummyKanjiMap[userInHira]) {
+                        box.innerText = dummyKanjiMap[userInHira];
+                    } else {
+                        // 漢字判定で変換不一致・不正解時は「異」ではなく入力されたひらがなを表示
+                        box.innerText = userInHira;
+                    }
+                } 
+                else {
+                    box.innerText = userInHira;
+                }
+            }
+        });
+
+        resultArea.style.display = 'flex';
+
+        // 間違えた場合、画面右下に正解（主解答の表示文字列）を表示
+        if (!allCorrect || !isPerfect) {
+            const correctAnswerNotice = document.getElementById('correctAnswerNotice');
+            const fullAnswerStr = targetDisplayArr.join('');
+            correctAnswerNotice.innerText = `答え  ${fullAnswerStr}`;
+            correctAnswerNotice.style.display = 'block';
+        }
+
+        if (q.postImage) {
+            const postModal = document.getElementById('postImageModal');
+            document.getElementById('postImg').src = q.postImage;
+            postModal.style.display = 'block';
+        }
+
+        const ctrlDiv = document.getElementById('resultControl');
+        ctrlDiv.innerHTML = '';
+
+        if (allCorrect && isPerfect) {
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'game-ctrl-btn';
+            nextBtn.innerText = '正解！次の問題へ';
+            nextBtn.onclick = () => {
+                currentQIndex++;
+                if (currentQIndex < questionsData.length) {
+                    loadQuestion(currentQIndex);
+                } else {
+                    alert(`全問クリア！おめでとうございます！（全${questionsData.length}問正解）`);
+                    location.reload();
+                }
+            };
+            ctrlDiv.appendChild(nextBtn);
+        } else {
+            const gameOverDiv = document.createElement('div');
+            gameOverDiv.style.textAlign = 'center';
+            gameOverDiv.innerHTML = `
+                <div style="font-size: 2rem; color: var(--accent-red); font-weight: bold; text-shadow: 0 0 10px #000; margin-bottom: 10px;">
+                    GAME OVER （正解数: ${currentQIndex}問）
+                </div>
+                <button class="game-ctrl-btn" onclick="location.reload()">タイトルに戻る</button>
+            `;
+            ctrlDiv.appendChild(gameOverDiv);
+        }
+    }
+</script>
+
+</body>
+</html>
