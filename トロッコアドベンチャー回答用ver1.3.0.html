@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>トロッコアドベンチャー - チャレンジ</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg-brown: #1f140e;
+      --card-bg: #2d1d15;
+      --accent-gold: #b8860b;
+      --text-main: #ffffff;
+      --counter-bg: #ffcccc;
+      --counter-border: #8b0000;
+      --counter-text: #8b0000;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-brown);
+      color: var(--text-main);
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", MeiRyo, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    /* 背景動画エリア */
+    #bg-video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+      background-color: var(--bg-brown);
+    }
+
+    /* ゲームUIコンテナ (傾きアニメーション用) */
+    #ui-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 30px 20px;
+      transition: transform 0.6s ease-in-out;
+    }
+
+    /* 傾き効果 */
+    .tilt-left {
+      transform: rotate(-6deg) scale(1.05);
+    }
+    .tilt-right {
+      transform: rotate(6deg) scale(1.05);
+    }
+
+    /* スタート画面 / リザルト画面 モーダル */
+    .screen-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(20, 12, 8, 0.92);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .modal-box {
+      background: var(--card-bg);
+      border: 3px solid var(--accent-gold);
+      border-radius: 12px;
+      padding: 30px 40px;
+      text-align: center;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.7);
+    }
+
+    .modal-title {
+      font-size: 2rem;
+      color: var(--accent-gold);
+      margin-bottom: 20px;
+    }
+
+    .setting-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .setting-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #cbb9a8;
+    }
+
+    .setting-group select, .setting-group input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      background: #140c08;
+      border: 1px solid var(--accent-gold);
+      color: #fff;
+      border-radius: 6px;
+      font-size: 1rem;
+    }
+
+    .start-btn {
+      background: var(--accent-gold);
+      color: #000;
+      font-weight: bold;
+      font-size: 1.3rem;
+      border: none;
+      padding: 12px 40px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .start-btn:hover {
+      background: #d4a359;
+      transform: scale(1.05);
+    }
+
+    /* 問題文フレーム */
+    .question-frame {
+      background-color: var(--accent-gold);
+      border: 4px solid #5c3e2b;
+      border-radius: 12px;
+      padding: 20px 30px;
+      width: 80%;
+      max-width: 850px;
+      text-align: center;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+      margin-top: 10px;
+    }
+
+    .question-text {
+      color: #ffffff;
+      font-size: 1.8rem;
+      font-weight: bold;
+      text-shadow: 
+        -1.5px -1.5px 0 #000, 
+         1.5px -1.5px 0 #000, 
+        -1.5px  1.5px 0 #000, 
+         1.5px  1.5px 0 #000;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+
+    /* タイマー表示 */
+    .timer-container {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #ff4444;
+      text-shadow: 0 0 10px rgba(0,0,0,0.8);
+      margin-top: 10px;
+    }
+
+    /* 選択肢エリア */
+    .choices-container {
+      display: flex;
+      justify-content: space-between;
+      width: 90%;
+      max-width: 1000px;
+      margin-bottom: 40px;
+      position: relative;
+      height: 220px;
+    }
+
+    .choice-card {
+      background: rgba(45, 29, 21, 0.9);
+      border: 4px solid var(--accent-gold);
+      border-radius: 12px;
+      width: 45%;
+      height: 100%;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      position: absolute;
+      top: 0;
+      transition: transform 0.6s ease-in-out, left 0.6s ease-in-out, right 0.6s ease-in-out, border-color 0.3s, opacity 1s ease-in-out;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+    }
+
+    .choice-left { left: 0; }
+    .choice-right { right: 0; }
+
+    /* フェードイン＆拡大 アニメーション */
+    .choice-appear {
+      animation: fadeInScale 1s ease-out forwards;
+    }
+
+    @keyframes fadeInScale {
+      0% {
+        opacity: 0;
+        transform: scale(0.6);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .choice-card:hover, .choice-card.selected {
+      border-color: #ffffff;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+      transform: scale(1.03);
+    }
+
+    .choice-text {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #ffffff;
+      text-align: center;
+      word-break: break-all;
+    }
+
+    .choice-image {
+      max-width: 100%;
+      max-height: 130px;
+      object-fit: contain;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    /* 選択後の中央移動・拡大アニメーション */
+    .move-to-center {
+      left: 50% !important;
+      right: auto !important;
+      transform: translate(-50%, 0) scale(1.15) !important;
+      z-index: 50;
+      border-color: #ffeb3b !important;
+    }
+
+    /* 左下に表示される問題数カウンター */
+    .question-counter {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background-color: var(--counter-bg);
+      border: 3px solid var(--counter-border);
+      color: var(--counter-text);
+      font-weight: bold;
+      font-size: 1.4rem;
+      padding: 8px 20px;
+      border-radius: 8px;
+      z-index: 80;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <video id="bg-video" playsinline muted></video>
+
+  <div id="question-counter" class="question-counter" style="display: none;">
+    第 <span id="current-q-num">1</span> 問
+  </div>
+
+  <div id="ui-container" style="display: none;">
+    <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+      <div class="question-frame">
+        <div id="question-text" class="question-text">問題文がここに入ります</div>
+      </div>
+      <div id="timer-display" class="timer-container">10</div>
+    </div>
+
+    <div class="choices-container">
+      <div id="choice-1" class="choice-card choice-left" onclick="selectChoice(1)">
+        <div id="choice-1-text" class="choice-text"></div>
+        <img id="choice-1-img" class="choice-image" src="" style="display:none;">
+      </div>
+      <div id="choice-2" class="choice-card choice-right" onclick="selectChoice(2)">
+        <div id="choice-2-text" class="choice-text"></div>
+        <img id="choice-2-img" class="choice-image" src="" style="display:none;">
+      </div>
+    </div>
+  </div>
+
+  <div id="start-screen" class="screen-overlay">
+    <div class="modal-box">
+      <h1 class="modal-title">トロッコアドベンチャー</h1>
+      
+      <div class="setting-group">
+        <label for="difficulty-select">難易度選択</label>
+        <select id="difficulty-select">
+          <option value="easy">簡単 (Lv.1 のみ)</option>
+          <option value="normal">普通 (前半Lv.1 / 後半Lv.2+Lv.1)</option>
+          <option value="hard" selected>難しい (前半Lv.1+Lv.2 / 後半Lv.2)</option>
+        </select>
+      </div>
+
+      <div class="setting-group">
+        <label for="count-select">問題数</label>
+        <select id="count-select" onchange="toggleCustomInput()">
+          <option value="5">5問</option>
+          <option value="10">10問</option>
+          <option value="custom">完全任意</option>
+          <option value="all">全問挑戦</option>
+        </select>
+        <div id="custom-count-container" style="display: none; margin-top: 10px;">
+          <input type="number" id="custom-count-input" min="1" placeholder="問題数を入力してください">
+        </div>
+      </div>
+
+      <button class="start-btn" onclick="startGame()">ゲームスタート</button>
+    </div>
+  </div>
+
+  <div id="result-screen" class="screen-overlay" style="display: none;">
+    <div class="modal-box">
+      <h1 id="result-title" class="modal-title">GAME OVER</h1>
+      <p id="result-msg" style="margin-bottom: 20px; font-size: 1.2rem;"></p>
+      <button class="start-btn" onclick="location.reload()">もう一度プレイ</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Supabaseの設定 ---
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    // 動画ファイル名定義
+    const VIDEO_FILES = {
+      straight: 'straight.mp4',
+      left: 'left.mp4',
+      right: 'right.mp4',
+      gameover: 'gameover.mp4',
+      goal: 'goal.mp4'
+    };
+
+    let questions = [];
+    let gameQueue = [];
+    let currentQIndex = 0;
+    
+    let selectedChoiceNum = null; // 1:左, 2:右
+    let currentCorrectChoiceNum = null; // シャッフル後の正解位置 (1:左, 2:右)
+    let timerInterval = null;
+    let timeLeft = 10;
+    let isAcceptingInput = false;
+
+    const bgVideo = document.getElementById('bg-video');
+    const uiContainer = document.getElementById('ui-container');
+    const timerDisplay = document.getElementById('timer-display');
+
+    // 「完全任意」入力欄の切り替え
+    function toggleCustomInput() {
+      const countVal = document.getElementById('count-select').value;
+      const container = document.getElementById('custom-count-container');
+      container.style.display = (countVal === 'custom') ? 'block' : 'none';
+    }
+
+    // 動画再生ヘルパー関数（読み込めない・見つからない場合は背景色フォールバック）
+    function playVideo(fileName, loop = false, onEnded = null) {
+      bgVideo.src = fileName;
+      bgVideo.loop = loop;
+      bgVideo.onended = onEnded;
+
+      const playPromise = bgVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.warn(`動画 [${fileName}] の再生に失敗したかファイルが存在しません。`, error);
+          if (onEnded && !loop) {
+            setTimeout(onEnded, 2000);
+          }
+        });
+      }
+    }
+
+    // ゲーム開始処理
+    async function startGame() {
+      // Supabaseから問題データを取得
+      try {
+        const { data, error } = await supabaseClient
+          .from('quiz_data')
+          .select('torokko')
+          .eq('id', QUIZ_DATA_ROW_ID)
+          .single();
+
+        if (error || !data || !data.torokko) {
+          alert('問題データの取得に失敗したか、登録されている問題がありません。');
+          return;
+        }
+
+        questions = Array.isArray(data.torokko) ? data.torokko : [];
+      } catch (e) {
+        alert('問題データの読み込み中にエラーが発生しました。');
+        return;
+      }
+
+      if (questions.length === 0) {
+        alert('登録されている問題がありません。');
+        return;
+      }
+
+      const diff = document.getElementById('difficulty-select').value;
+      const countVal = document.getElementById('count-select').value;
+
+      // LV.1 と LV.2 の問題プールを作成（それぞれシャッフル）
+      let poolLv1 = questions.filter(q => (q.level || 'lv1') === 'lv1').sort(() => Math.random() - 0.5);
+      let poolLv2 = questions.filter(q => q.level === 'lv2').sort(() => Math.random() - 0.5);
+
+      // 難易度に応じた最大利用可能数の算出
+      let maxAvailable = (diff === 'easy') ? poolLv1.length : questions.length;
+
+      if (maxAvailable === 0) {
+        alert('該当する難易度の問題が登録されていません。');
+        return;
+      }
+
+      // 要求された問題数の取得
+      let requestedCount = 0;
+      if (countVal === 'custom') {
+        const customInput = document.getElementById('custom-count-input');
+        const val = parseInt(customInput.value, 10);
+        if (isNaN(val) || val <= 0) {
+          alert('有効な問題数を入力してください。');
+          return;
+        }
+        requestedCount = val;
+      } else if (countVal === 'all') {
+        requestedCount = maxAvailable;
+      } else {
+        requestedCount = parseInt(countVal, 10);
+      }
+
+      // 問題数のチェックと補正処理
+      let targetCount = requestedCount;
+      if (requestedCount > maxAvailable) {
+        targetCount = maxAvailable;
+        if (countVal === 'custom') {
+          document.getElementById('custom-count-input').value = maxAvailable;
+          alert(`入力された問題数（${requestedCount}問）が登録問題数（${maxAvailable}問）を超えているため、登録問題数の ${maxAvailable} 問に変更しました。`);
+        } else if (countVal === '5' || countVal === '10') {
+          alert(`登録されている問題数（${maxAvailable}問）が選択された問題数（${requestedCount}問）より少ないため、問題数を ${maxAvailable} 問としてスタートします。`);
+        }
+      }
+
+      // 出題順の組み立て
+      gameQueue = buildGameQueue(diff, targetCount, poolLv1, poolLv2);
+
+      currentQIndex = 0;
+
+      // 画面表示切替
+      document.getElementById('start-screen').style.display = 'none';
+      document.getElementById('question-counter').style.display = 'block';
+      uiContainer.style.display = 'flex';
+
+      // 直進動画ループ再生開始
+      playVideo(VIDEO_FILES.straight, true);
+
+      // キーボード操作リスナー設定
+      window.addEventListener('keydown', handleKeyDown);
+
+      // 第1問目開始
+      loadQuestion();
+    }
+
+    // 各プールから指定数を安全に取得する補助関数
+    function pullQuestions(countLV1, countLV2, lv1Pool, lv2Pool) {
+      let result = [];
+      for (let i = 0; i < countLV1 && lv1Pool.length > 0; i++) {
+        result.push(lv1Pool.pop());
+      }
+      for (let i = 0; i < countLV2 && lv2Pool.length > 0; i++) {
+        result.push(lv2Pool.pop());
+      }
+      while (result.length < (countLV1 + countLV2)) {
+        if (lv1Pool.length > 0) result.push(lv1Pool.pop());
+        else if (lv2Pool.length > 0) result.push(lv2Pool.pop());
+        else break;
+      }
+      return result;
+    }
+
+    // 難易度と問題数に応じて出題キューを作成する
+    function buildGameQueue(diff, targetCount, poolLv1, poolLv2) {
+      let lv1Rem = [...poolLv1];
+      let lv2Rem = [...poolLv2];
+
+      if (diff === 'easy') {
+        return pullQuestions(targetCount, 0, lv1Rem, lv2Rem);
+      }
+
+      const p1Count = Math.floor(targetCount / 4);
+      const p2Count = targetCount - p1Count;
+
+      let phase1 = [];
+      let phase2 = [];
+
+      if (diff === 'normal') {
+        phase1 = pullQuestions(p1Count, 0, lv1Rem, lv2Rem);
+
+        const p2_lv2 = Math.round(p2Count * (2 / 3));
+        const p2_lv1 = p2Count - p2_lv2;
+        phase2 = pullQuestions(p2_lv1, p2_lv2, lv1Rem, lv2Rem);
+        phase2.sort(() => Math.random() - 0.5);
+      } else if (diff === 'hard') {
+        const p1_lv1 = Math.floor(p1Count / 2);
+        const p1_lv2 = p1Count - p1_lv1;
+        phase1 = pullQuestions(p1_lv1, p1_lv2, lv1Rem, lv2Rem);
+        phase1.sort(() => Math.random() - 0.5);
+
+        phase2 = pullQuestions(0, p2Count, lv1Rem, lv2Rem);
+      }
+
+      return [...phase1, ...phase2];
+    }
+
+    // 問題の読み込みと表示
+    function loadQuestion() {
+      const q = gameQueue[currentQIndex];
+      document.getElementById('current-q-num').textContent = currentQIndex + 1;
+
+      // UIのリセット
+      uiContainer.className = '';
+      selectedChoiceNum = null;
+      isAcceptingInput = true;
+      timeLeft = 10;
+      timerDisplay.textContent = timeLeft;
+
+      // 問題文
+      document.getElementById('question-text').textContent = q.questionText;
+
+      // 左右ランダムシャッフル
+      const isSwapped = Math.random() < 0.5;
+      const leftChoice = isSwapped ? q.choice2 : q.choice1;
+      const rightChoice = isSwapped ? q.choice1 : q.choice2;
+
+      // シャッフル後の正解位置（1:左, 2:右）を保持
+      currentCorrectChoiceNum = isSwapped ? (q.correctAnswer === 1 ? 2 : 1) : q.correctAnswer;
+
+      // 選択肢 1 (左)
+      const c1 = document.getElementById('choice-1');
+      const c1Text = document.getElementById('choice-1-text');
+      const c1Img = document.getElementById('choice-1-img');
+      c1.className = 'choice-card choice-left choice-appear';
+      c1.style.opacity = '';
+      c1Text.textContent = leftChoice.text || '';
+      if (leftChoice.image) {
+        c1Img.src = leftChoice.image;
+        c1Img.style.display = 'block';
+      } else {
+        c1Img.style.display = 'none';
+      }
+
+      // 選択肢 2 (右)
+      const c2 = document.getElementById('choice-2');
+      const c2Text = document.getElementById('choice-2-text');
+      const c2Img = document.getElementById('choice-2-img');
+      c2.className = 'choice-card choice-right choice-appear';
+      c2.style.opacity = '';
+      c2Text.textContent = rightChoice.text || '';
+      if (rightChoice.image) {
+        c2Img.src = rightChoice.image;
+        c2Img.style.display = 'block';
+      } else {
+        c2Img.style.display = 'none';
+      }
+
+      // デフォルト選択（最初は左を選択状態に）
+      selectChoice(1);
+
+      // 10秒タイマースタート
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        timerDisplay.textContent = timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          confirmAnswer();
+        }
+      }, 1000);
+    }
+
+    // 選択肢を選ぶ（マウス・キー操作）
+    function selectChoice(num) {
+      if (!isAcceptingInput) return;
+      selectedChoiceNum = num;
+
+      document.getElementById('choice-1').classList.toggle('selected', num === 1);
+      document.getElementById('choice-2').classList.toggle('selected', num === 2);
+    }
+
+    // キーボード操作ハンドラ (A, D, ←, →, Enter)
+    function handleKeyDown(e) {
+      if (!isAcceptingInput) return;
+
+      if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') {
+        selectChoice(1);
+      } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
+        selectChoice(2);
+      } else if (e.key === 'Enter') {
+        clearInterval(timerInterval);
+        confirmAnswer();
+      }
+    }
+
+    // 解答確定処理
+    function confirmAnswer() {
+      if (!isAcceptingInput) return;
+      isAcceptingInput = false;
+      clearInterval(timerInterval);
+
+      if (!selectedChoiceNum) selectedChoiceNum = 1;
+
+      const selectedEl = document.getElementById(`choice-${selectedChoiceNum}`);
+      const otherEl = document.getElementById(`choice-${selectedChoiceNum === 1 ? 2 : 1}`);
+
+      // 選ばれなかった選択肢のアニメーションクラスを解除して1秒かけてフェードアウト
+      otherEl.classList.remove('choice-appear');
+      otherEl.style.opacity = '0';
+
+      // 選んだ選択肢を中央へ移動＆拡大させる
+      selectedEl.classList.remove('choice-appear');
+      selectedEl.classList.add('move-to-center');
+
+      // 中央に配置後（2秒後）、1秒かけてフェードアウト
+      setTimeout(() => {
+        selectedEl.style.opacity = '0';
+
+        // 1秒間のフェードアウト完了を待って動画・分岐演出へ
+        setTimeout(() => {
+          processBranch();
+        }, 1000);
+
+      }, 2000);
+    }
+
+    // トロッコ分岐演出と正誤判定
+    function processBranch() {
+      const q = gameQueue[currentQIndex];
+      const isCorrect = (selectedChoiceNum === currentCorrectChoiceNum);
+      const isRight = (selectedChoiceNum === 2);
+
+      // 画面の傾き付与
+      uiContainer.classList.add(isRight ? 'tilt-right' : 'tilt-left');
+
+      // 分岐動画再生
+      const branchVideo = isRight ? VIDEO_FILES.right : VIDEO_FILES.left;
+
+      playVideo(branchVideo, false, () => {
+        if (isCorrect) {
+          // 正解の場合：傾きを戻す
+          uiContainer.classList.remove('tilt-right', 'tilt-left');
+
+          currentQIndex++;
+          if (currentQIndex < gameQueue.length) {
+            playVideo(VIDEO_FILES.straight, true);
+            loadQuestion();
+          } else {
+            playVideo(VIDEO_FILES.goal, false, () => {
+              showResult(true);
+            });
+          }
+        } else {
+          // 不正解の場合
+          playVideo(VIDEO_FILES.gameover, false, () => {
+            showResult(false);
+          });
+        }
+      });
+    }
+
+    // リザルト画面表示
+    function showResult(isGoal) {
+      uiContainer.style.display = 'none';
+      document.getElementById('question-counter').style.display = 'none';
+      
+      const resultScreen = document.getElementById('result-screen');
+      const title = document.getElementById('result-title');
+      const msg = document.getElementById('result-msg');
+
+      if (isGoal) {
+        title.textContent = 'GAME CLEAR!!';
+        title.style.color = '#ffeb3b';
+        msg.textContent = `おめでとうございます！全 ${gameQueue.length} 問クリア達成です！`;
+      } else {
+        title.textContent = 'GAME OVER';
+        title.style.color = '#a93226';
+        msg.textContent = `残念！ 第 ${currentQIndex + 1} 問目で脱線してしまいました...`;
+      }
+
+      resultScreen.style.display = 'flex';
+    }
+  </script>
+</body>
+</html>
