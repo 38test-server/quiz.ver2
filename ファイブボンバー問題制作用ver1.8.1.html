@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ファイブボンバー - 問題登録パネル (個別画像・広辞苑問題対応)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #f1f5f9;          /* 背景：明るく品のある薄灰色 */
+            --card-bg: #ffffff;         /* カード背景：ホワイト */
+            --accent-red: #dc2626;      /* 番組の情熱的な赤 (Red 600) */
+            --accent-red-hover: #b91c1c;/* ホバー時の赤 */
+            --gold-primary: #d97706;    /* ゴールド（主色） */
+            --gold-light: #fef08a;      /* ライトゴールド */
+            --gold-border: #ca8a04;     /* 金色のフレーム線 */
+            --gold-glow: rgba(202, 138, 4, 0.2); /* 上品な金色の発光 */
+            --text-color: #0f172a;      /* 文字色：ダークスレート */
+            --text-muted: #64748b;      /* 補助文字：ミドルグレー */
+            --danger-color: #ef4444;    /* 削除・危険ボタンの赤 */
+            --success-color: #10b981;   /* 成功時の緑 */
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 20%, #ffffff 0%, #f1f5f9 60%, #e2e8f0 100%);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid var(--gold-border);
+            padding-bottom: 15px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.2rem;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #b91c1c 0%, #dc2626 40%, #b45309 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            margin: 5px 0 0 0;
+            font-size: 0.95rem;
+        }
+
+        /* ログイン状態表示エリア (ファイブリーグ仕様の直接入力UI) */
+        .auth-bar {
+            background-color: #fff8f0;
+            border: 1px solid var(--gold-border);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .auth-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .auth-inputs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .auth-inputs input {
+            padding: 6px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            width: 150px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 28px;
+            border: 2px solid var(--gold-border);
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05), 0 0 12px var(--gold-glow);
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.35rem;
+            border-left: 5px solid var(--accent-red);
+            padding-left: 12px;
+            margin-bottom: 20px;
+            color: var(--text-color);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: var(--accent-red);
+            font-size: 1rem;
+        }
+
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            background-color: #f8fafc;
+            color: var(--text-color);
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: all 0.2s;
+        }
+
+        input[type="text"]:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--gold-border);
+            box-shadow: 0 0 8px var(--gold-glow);
+            background-color: #ffffff;
+        }
+
+        .type-selector-group {
+            display: flex;
+            gap: 15px;
+            background-color: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 2px solid #cbd5e1;
+        }
+
+        .type-selector-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            color: var(--text-color);
+            font-size: 0.95rem;
+        }
+
+        .type-selector-label input[type="radio"] {
+            accent-color: var(--accent-red);
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .answer-input-container {
+            background-color: #f8fafc;
+            border: 2px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: border-color 0.2s;
+        }
+
+        .answer-input-container:focus-within {
+            border-color: var(--gold-border);
+        }
+
+        @media (min-width: 650px) {
+            .answer-input-container {
+                flex-direction: row;
+                align-items: center;
+            }
+        }
+
+        .row-num {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: #ffffff;
+            font-weight: bold;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 5px rgba(220, 38, 38, 0.2);
+        }
+
+        .sub-question-input {
+            flex: 2;
+        }
+
+        .row-image-upload {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .btn-image-select {
+            cursor: pointer;
+            background-color: #fffbeb;
+            color: var(--gold-primary);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            border: 1.5px dashed var(--gold-border);
+            transition: all 0.2s;
+        }
+
+        .btn-image-select:hover {
+            background-color: #fef3c7;
+            color: #b45309;
+            box-shadow: 0 0 8px var(--gold-glow);
+        }
+
+        .row-image-preview-box {
+            position: relative;
+            width: 44px;
+            height: 44px;
+            border: 2px solid var(--gold-border);
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #f1f5f9;
+        }
+
+        .row-image-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .btn-row-image-clear {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: rgba(220, 38, 38, 0.9);
+            color: white;
+            border: none;
+            width: 18px;
+            height: 18px;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            font-weight: bold;
+        }
+
+        .answer-input {
+            flex: 3;
+        }
+
+        .btn {
+            cursor: pointer;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: #ffffff;
+            border: 1.5px solid #fde047;
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.25);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 38, 38, 0.35), 0 0 10px var(--gold-glow);
+        }
+
+        .btn-secondary {
+            background-color: #64748b;
+            color: #ffffff;
+            border: 1px solid #475569;
+        }
+
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .btn-danger:disabled {
+            background-color: #cbd5e1;
+            cursor: not-allowed;
+            border-color: #94a3b8;
+        }
+
+        .btn-full {
+            width: 100%;
+            padding: 14px;
+            font-size: 1.1rem;
+            margin-top: 10px;
+        }
+
+        .helper-text {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .share-box {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .q-list-item {
+            background-color: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid var(--gold-border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .q-info {
+            flex-grow: 1;
+            padding-right: 20px;
+        }
+
+        .q-text {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+            color: var(--text-color);
+        }
+
+        .q-meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-top: 5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .badge-lv1 { background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+        .badge-lv2 { background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .badge-lv3 { background-color: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .badge-lv4 { background-color: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }
+        .badge-lv5 { background-color: #faf5ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+        .badge-image { background-color: #fef3c7; color: #92400e; border: 1px solid #fde047; }
+        .badge-kojien { background-color: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+
+        .empty-message {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 20px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>BOMBER CREATOR</h1>
+        <p class="subtitle">ファイブボンバー用 問題登録パネル (個別画像・広辞苑問題対応版)</p>
+    </header>
+
+    <div class="auth-bar">
+        <div class="auth-info">
+            <span id="sync-status">☁️ Supabase同期中...</span>
+            <span id="user-display-name" style="font-weight: bold; color: var(--gold-primary);"></span>
+        </div>
+        <div class="auth-inputs" id="auth-actions">
+            <input type="email" id="auth-email" placeholder="メールアドレス">
+            <input type="password" id="auth-password" placeholder="パスワード">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-login" onclick="handleAuth()">ログイン</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>データの共有・バックアップ</h2>
+        <p class="subtitle" style="margin-bottom: 15px;">登録した問題を画像データも含めて他のデバイスへ丸ごと共有・バックアップできます。</p>
+        <div class="share-box">
+            <button type="button" class="btn btn-secondary" onclick="exportQuestions()">📥 問題データを書き出す (保存)</button>
+            
+            <label class="btn btn-primary" style="margin: 0;">
+                📤 問題データを読み込む (インポート)
+                <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importQuestions(event)">
+            </label>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 id="form-title">新しく問題を登録する</h2>
+        <form id="question-form">
+            <div class="form-group">
+                <label for="question-text">問題文（主題）</label>
+                <textarea id="question-text" rows="2" placeholder="例: 「写真の歴史人物の名前を答えろ」や「広辞苑に載っている『あ』から始まる3文字の単語 10個答えよ」など" required></textarea>
+                <div class="helper-text">※クイズ全体にかかる大まかなルール・お題を入力してください。</div>
+            </div>
+
+            <div class="form-group">
+                <label>問題タイプ</label>
+                <div class="type-selector-group">
+                    <label class="type-selector-label">
+                        <input type="radio" name="qtype" value="normal" checked onchange="handleTypeChange('normal')"> 通常問題 (枠ごとに正解を指定)
+                    </label>
+                    <label class="type-selector-label">
+                        <input type="radio" name="qtype" value="kojien" onchange="handleTypeChange('kojien')"> 広辞苑問題 (大量の正解候補から回答)
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="difficulty">難易度</label>
+                <select id="difficulty">
+                    <option value="lv1">Lv.1 (常識)</option>
+                    <option value="lv2">Lv.2 (簡単)</option>
+                    <option value="lv3" selected>Lv.3 (普通)</option>
+                    <option value="lv4">Lv.4 (難しい)</option>
+                    <option value="lv5">Lv.5 (鬼)</option>
+                </select>
+            </div>
+
+            <div id="normal-section" class="form-group">
+                <label>解答リスト (最低5枠入力してください)</label>
+                <div class="helper-text" style="margin-bottom: 10px;">
+                    各枠ごとに正解となる文字列を入力します。別解がある場合はスラッシュ「/」で区切ってください（例: 富士山/ふじさん）。<br>
+                    個別に画像やお題テキストを指定する場合は入力してください。
+                </div>
+                
+                <div id="answers-area"></div>
+
+                <button type="button" class="btn btn-secondary" id="add-answer-btn" style="margin-top: 10px;">＋ 正解枠を追加する</button>
+            </div>
+
+            <div id="kojien-section" class="form-group" style="display: none;">
+                <label for="kojien-answers-text">広辞苑正解候補リスト (改行区切り)</label>
+                <textarea id="kojien-answers-text" rows="10" placeholder="正解となる単語を1行に1つずつ入力してください。&#10;別解がある場合はスラッシュ「/」で区切れます。&#10;&#10;例:&#10;あい&#10;あお&#10;あか/赤&#10;あき/秋"></textarea>
+                <div class="helper-text">※広辞苑のように「登録された大量の正解候補の中からどれでも回答できる」問題形式になります。最低5項目以上入力してください。</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full" id="submit-btn">この問題を保存する</button>
+            <button type="button" class="btn btn-secondary btn-full" id="cancel-edit-btn" style="display: none; margin-top: 10px;">編集をキャンセル</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>登録済み問題一覧</h2>
+        <div id="questions-list"></div>
+    </div>
+</div>
+
+<script>
+    // Supabase 設定
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    // 管理者ユーザーIDリスト
+    const ADMIN_USER_IDS = [
+        '99518a40-9f6c-4739-ad66-f580ef6443a2'
+    ];
+
+    let questions = JSON.parse(localStorage.getItem('five_bomber_questions')) || [];
+    let editingId = null; 
+    let currentType = 'normal'; 
+    let currentUser = null;
+
+    const questionForm = document.getElementById('question-form');
+    const questionTextInput = document.getElementById('question-text');
+    const answersArea = document.getElementById('answers-area');
+    const addAnswerBtn = document.getElementById('add-answer-btn');
+    const questionsList = document.getElementById('questions-list');
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+    const normalSection = document.getElementById('normal-section');
+    const kojienSection = document.getElementById('kojien-section');
+    const kojienAnswersText = document.getElementById('kojien-answers-text');
+
+    resetAnswersArea();
+    initSupabaseAuth();
+
+    // 認証初期化（ファイブリーグ仕様）
+    async function initSupabaseAuth() {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        updateUserSession(session);
+
+        supabaseClient.auth.onAuthStateChange((_event, session) => {
+            updateUserSession(session);
+        });
+
+        await loadFromSupabase();
+    }
+
+    function updateUserSession(session) {
+        const authActions = document.getElementById('auth-actions');
+        if (session && session.user) {
+            currentUser = session.user;
+            document.getElementById('user-display-name').innerText = `👤 ${currentUser.email || currentUser.id}`;
+            authActions.innerHTML = `
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-login" onclick="handleAuth()">ログアウト</button>
+            `;
+        } else {
+            currentUser = null;
+            document.getElementById('user-display-name').innerText = '👤 未ログイン (ゲスト)';
+            authActions.innerHTML = `
+                <input type="email" id="auth-email" placeholder="メールアドレス">
+                <input type="password" id="auth-password" placeholder="パスワード">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-login" onclick="handleAuth()">ログイン</button>
+            `;
+        }
+        renderQuestions();
+    }
+
+    async function handleAuth() {
+        if (currentUser) {
+            await supabaseClient.auth.signOut();
+        } else {
+            const emailInput = document.getElementById('auth-email');
+            const passwordInput = document.getElementById('auth-password');
+            const email = emailInput ? emailInput.value.trim() : '';
+            const password = passwordInput ? passwordInput.value : '';
+
+            if (!email || !password) {
+                alert('メールアドレスとパスワードを入力してください。');
+                return;
+            }
+
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) {
+                alert('ログインに失敗しました: ' + error.message);
+            }
+        }
+    }
+
+    // Supabaseから five_bomber データの読み込み
+    async function loadFromSupabase() {
+        const syncStatus = document.getElementById('sync-status');
+        syncStatus.innerText = '☁️ Supabase同期中...';
+
+        try {
+            const { data, error } = await supabaseClient
+                .from('quiz_data')
+                .select('five_bomber')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .maybeSingle();
+
+            if (error) {
+                console.error('Supabase load error:', error);
+                syncStatus.innerText = '⚠️ クラウド同期エラー';
+                return;
+            }
+
+            if (data && data.five_bomber && Array.isArray(data.five_bomber)) {
+                questions = data.five_bomber;
+                localStorage.setItem('five_bomber_questions', JSON.stringify(questions));
+                syncStatus.innerText = '☁️ Supabase同期完了';
+            } else {
+                syncStatus.innerText = '☁️ データ準備完了';
+            }
+        } catch (e) {
+            console.error(e);
+            syncStatus.innerText = '⚠️ 通信エラー';
+        }
+        renderQuestions();
+    }
+
+    // Supabaseへ five_bomber データの保存
+    async function saveToSupabase() {
+        const syncStatus = document.getElementById('sync-status');
+        syncStatus.innerText = '☁️ 保存中...';
+
+        try {
+            const { data: existingData, error: checkError } = await supabaseClient
+                .from('quiz_data')
+                .select('id')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .maybeSingle();
+
+            if (checkError) {
+                console.error('Check record error:', checkError);
+            }
+
+            let saveError = null;
+
+            if (existingData) {
+                const { error } = await supabaseClient
+                    .from('quiz_data')
+                    .update({
+                        five_bomber: questions
+                    })
+                    .eq('id', QUIZ_DATA_ROW_ID);
+                saveError = error;
+            } else {
+                const { error } = await supabaseClient
+                    .from('quiz_data')
+                    .insert({
+                        id: QUIZ_DATA_ROW_ID,
+                        five_bomber: questions
+                    });
+                saveError = error;
+            }
+
+            if (saveError) {
+                console.error('Supabase save error:', saveError);
+                syncStatus.innerText = '⚠️ クラウド保存失敗';
+                alert('Supabaseへのデータ保存に失敗しました:\n' + saveError.message);
+            } else {
+                syncStatus.innerText = '☁️ Supabase同期完了';
+            }
+        } catch (e) {
+            console.error(e);
+            syncStatus.innerText = '⚠️ 通信エラー';
+            alert('通信エラーが発生しました: ' + e.message);
+        }
+    }
+
+    // 削除権限のチェック (問題の制作者または管理者のみ)
+    function canDeleteQuestion(q) {
+        if (!currentUser) return false;
+        if (currentUser.is_admin || ADMIN_USER_IDS.includes(currentUser.id)) return true;
+        if (q.created_by && q.created_by === currentUser.id) return true;
+        return false;
+    }
+
+    // 広辞苑問題時の文末「10個答えよ」自動追加・削除補助関数
+    function adjustKojienSuffix(type) {
+        let text = questionTextInput.value;
+        const suffix = "10個答えよ";
+        if (type === 'kojien') {
+            if (!text.endsWith(suffix)) {
+                questionTextInput.value = text.trim() ? (text.trim() + " " + suffix) : suffix;
+            }
+        } else {
+            if (text.endsWith(suffix)) {
+                questionTextInput.value = text.slice(0, -suffix.length).trim();
+            }
+        }
+    }
+
+    // 問題タイプ変更時の処理
+    function handleTypeChange(newType) {
+        if (currentType === newType) return;
+
+        if (newType === 'kojien') {
+            const currentAnswers = getAnswersFromNormalUI();
+            const lines = currentAnswers.map(ansArr => ansArr.join(' / '));
+            kojienAnswersText.value = lines.join('\n');
+            normalSection.style.display = 'none';
+            kojienSection.style.display = 'block';
+        } else {
+            const currentAnswers = getAnswersFromKojienUI();
+            answersArea.innerHTML = '';
+            const count = Math.max(currentAnswers.length, 5);
+            for (let i = 0; i < count; i++) {
+                const ansStr = currentAnswers[i] ? currentAnswers[i].join(' / ') : '';
+                createRow(i + 1, '', ansStr, '');
+            }
+            kojienSection.style.display = 'none';
+            normalSection.style.display = 'block';
+        }
+        currentType = newType;
+        adjustKojienSuffix(newType);
+    }
+
+    // 通常UIから正解リストを取得
+    function getAnswersFromNormalUI() {
+        const containers = answersArea.querySelectorAll('.answer-input-container');
+        const answers = [];
+        containers.forEach(container => {
+            const ansVal = container.querySelector('.answer-input').value.trim();
+            if (ansVal) {
+                const vars = ansVal.split('/').map(v => v.trim()).filter(v => v !== "");
+                if (vars.length > 0) answers.push(vars);
+            }
+        });
+        return answers;
+    }
+
+    // 広辞苑UIから正解リストを取得
+    function getAnswersFromKojienUI() {
+        const text = kojienAnswersText.value;
+        const lines = text.split('\n');
+        const answers = [];
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed) {
+                const vars = trimmed.split('/').map(v => v.trim()).filter(v => v !== "");
+                if (vars.length > 0) answers.push(vars);
+            }
+        });
+        return answers;
+    }
+
+    function resetAnswersArea() {
+        answersArea.innerHTML = '';
+        for (let i = 1; i <= 5; i++) {
+            createRow(i);
+        }
+    }
+
+    function createRow(num, subQ = '', defaultAns = '', imageData = '') {
+        const div = document.createElement('div');
+        div.className = 'answer-input-container';
+        if (imageData) {
+            div.dataset.imageData = imageData;
+        }
+
+        const previewDisplay = imageData ? 'block' : 'none';
+        const labelDisplay = imageData ? 'none' : 'inline-flex';
+
+        div.innerHTML = `
+            <div class="row-num">${num}</div>
+            <input type="text" class="sub-question-input" placeholder="お題 (例: 写真①, レベル1)" value="${escapeHTML(subQ)}">
+            <div class="row-image-upload">
+                <label class="btn-image-select" style="display: ${labelDisplay};">
+                    📷 画像
+                    <input type="file" class="row-image-file" accept="image/*" style="display:none;">
+                </label>
+                <div class="row-image-preview-box" style="display: ${previewDisplay};">
+                    <img class="row-image-preview" src="${imageData}" alt="プレビュー">
+                    <button type="button" class="btn-row-image-clear" title="画像を削除">✕</button>
+                </div>
+            </div>
+            <input type="text" class="answer-input" placeholder="正解パターン (例: 富士山/ふじさん)" value="${escapeHTML(defaultAns)}">
+        `;
+
+        if (num > 5) {
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.className = 'btn btn-danger remove-answer-btn';
+            delBtn.style.padding = '8px 12px';
+            delBtn.style.fontSize = '0.9rem';
+            delBtn.textContent = '削除';
+            div.appendChild(delBtn);
+        }
+
+        answersArea.appendChild(div);
+    }
+
+    addAnswerBtn.addEventListener('click', () => {
+        const nextNum = answersArea.querySelectorAll('.answer-input-container').length + 1;
+        createRow(nextNum);
+    });
+
+    answersArea.addEventListener('change', (e) => {
+        if (e.target.classList.contains('row-image-file')) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const container = e.target.closest('.answer-input-container');
+            const previewBox = container.querySelector('.row-image-preview-box');
+            const previewImg = container.querySelector('.row-image-preview');
+            const selectLabel = container.querySelector('.btn-image-select');
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const max_size = 600;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > max_size) {
+                            height *= max_size / width;
+                            width = max_size;
+                        }
+                    } else {
+                        if (height > max_size) {
+                            width *= max_size / height;
+                            height = max_size;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const base64 = canvas.toDataURL('image/jpeg', 0.8);
+                    container.dataset.imageData = base64;
+                    previewImg.src = base64;
+                    previewBox.style.display = 'block';
+                    selectLabel.style.display = 'none';
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    answersArea.addEventListener('click', (e) => {
+        if (e.target.classList.contains('btn-row-image-clear')) {
+            const container = e.target.closest('.answer-input-container');
+            const previewBox = container.querySelector('.row-image-preview-box');
+            const previewImg = container.querySelector('.row-image-preview');
+            const selectLabel = container.querySelector('.btn-image-select');
+            const fileInput = container.querySelector('.row-image-file');
+
+            delete container.dataset.imageData;
+            previewImg.src = '';
+            previewBox.style.display = 'none';
+            selectLabel.style.display = 'inline-flex';
+            fileInput.value = '';
+        }
+
+        if (e.target.classList.contains('remove-answer-btn')) {
+            const container = e.target.closest('.answer-input-container');
+            container.remove();
+            reindexRows();
+        }
+    });
+
+    function reindexRows() {
+        const containers = answersArea.querySelectorAll('.answer-input-container');
+        containers.forEach((container, index) => {
+            const numLabel = container.querySelector('.row-num');
+            if (numLabel) numLabel.textContent = index + 1;
+        });
+    }
+
+    questionForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const qText = questionTextInput.value.trim();
+        const diff = document.getElementById('difficulty').value;
+        const selectedType = document.querySelector('input[name="qtype"]:checked').value;
+
+        if (!qText) {
+            alert('問題文を入力してください。');
+            return;
+        }
+
+        let answersArray = [];
+        let subQuestionsArray = [];
+        let subImagesArray = [];
+        let hasSubQuestions = false;
+        let hasSubImages = false;
+
+        if (selectedType === 'kojien') {
+            answersArray = getAnswersFromKojienUI();
+            if (answersArray.length < 5) {
+                alert('広辞苑問題の場合も、正解候補は最低5項目以上入力してください。');
+                return;
+            }
+        } else {
+            const containers = answersArea.querySelectorAll('.answer-input-container');
+            containers.forEach(container => {
+                const ansVal = container.querySelector('.answer-input').value.trim();
+                const subVal = container.querySelector('.sub-question-input').value.trim();
+                const imgVal = container.dataset.imageData || null;
+
+                if (ansVal) {
+                    const vars = ansVal.split('/').map(v => v.trim()).filter(v => v !== "");
+                    if (vars.length > 0) {
+                        answersArray.push(vars);
+                        subQuestionsArray.push(subVal);
+                        subImagesArray.push(imgVal);
+                        if (subVal !== "") hasSubQuestions = true;
+                        if (imgVal !== null) hasSubImages = true;
+                    }
+                }
+            });
+
+            if (answersArray.length < 5) {
+                alert('ファイブボンバーの性質上、正解となるパターンは最低5つ以上登録してください。');
+                return;
+            }
+        }
+
+        const existingItem = editingId !== null ? questions.find(q => q.id === editingId) : null;
+
+        const questionData = {
+            id: editingId !== null ? editingId : ('bomber_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)),
+            question: qText,
+            type: selectedType,
+            difficulty: diff,
+            answers: answersArray,
+            subQuestions: (selectedType === 'normal' && hasSubQuestions) ? subQuestionsArray : null,
+            subImages: (selectedType === 'normal' && hasSubImages) ? subImagesArray : null,
+            created_by: existingItem ? existingItem.created_by : (currentUser ? currentUser.id : null)
+        };
+
+        if (editingId !== null) {
+            const index = questions.findIndex(q => q.id === editingId);
+            if (index !== -1) {
+                questions[index] = questionData;
+                alert('問題を更新しました！');
+            }
+            clearEditState();
+        } else {
+            questions.push(questionData);
+            alert(selectedType === 'kojien' ? '広辞苑問題を登録しました！' : '通常問題を登録しました！');
+        }
+
+        saveQuestions();
+        await saveToSupabase();
+
+        questionForm.reset();
+        setFormType('normal');
+        resetAnswersArea();
+        renderQuestions();
+    });
+
+    function setFormType(type) {
+        currentType = type;
+        const radio = document.querySelector(`input[name="qtype"][value="${type}"]`);
+        if (radio) radio.checked = true;
+        
+        if (type === 'kojien') {
+            normalSection.style.display = 'none';
+            kojienSection.style.display = 'block';
+        } else {
+            kojienSection.style.display = 'none';
+            normalSection.style.display = 'block';
+        }
+        adjustKojienSuffix(type);
+    }
+
+    function clearEditState() {
+        editingId = null;
+        document.getElementById('form-title').textContent = '新しく問題を登録する';
+        document.getElementById('submit-btn').textContent = 'この問題を保存する';
+        cancelEditBtn.style.display = 'none';
+    }
+
+    cancelEditBtn.addEventListener('click', () => {
+        clearEditState();
+        questionForm.reset();
+        setFormType('normal');
+        resetAnswersArea();
+    });
+
+    function saveQuestions() {
+        localStorage.setItem('five_bomber_questions', JSON.stringify(questions));
+    }
+
+    function renderQuestions() {
+        questionsList.innerHTML = '';
+        if (questions.length === 0) {
+            questionsList.innerHTML = '<div class="empty-message">登録されている問題はありません。</div>';
+            return;
+        }
+
+        questions.forEach((q, index) => {
+            const item = document.createElement('div');
+            item.className = 'q-list-item';
+
+            let diffBadge = '';
+            const diff = q.difficulty || 'lv3';
+            const diffMap = {
+                lv1: '<span class="badge badge-lv1">Lv.1 常識</span>',
+                lv2: '<span class="badge badge-lv2">Lv.2 簡単</span>',
+                lv3: '<span class="badge badge-lv3">Lv.3 普通</span>',
+                lv4: '<span class="badge badge-lv4">Lv.4 難しい</span>',
+                lv5: '<span class="badge badge-lv5">Lv.5 鬼</span>'
+            };
+            diffBadge = diffMap[diff] || diffMap['lv3'];
+
+            const isKojien = (q.type === 'kojien');
+            const typeBadge = isKojien ? '<span class="badge badge-kojien">広辞苑</span>' : '<span class="badge badge-lv1">通常</span>';
+            const imageBadge = (q.subImages && q.subImages.some(img => img !== null)) ? '<span class="badge badge-image">🖼️ 画像あり</span>' : '';
+
+            const answersPreview = q.answers.map(a => a[0]).join(', ');
+            const countText = isKojien ? `正解候補: <strong>${q.answers.length}個</strong>` : `問題数: <strong>${q.answers.length}問</strong>`;
+
+            const userCanDelete = canDeleteQuestion(q);
+            const deleteBtnAttr = userCanDelete ? '' : 'disabled title="制作者または管理者のみ削除可能です"';
+
+            item.innerHTML = `
+                <div class="q-info">
+                    <div class="q-text">${index + 1}. ${escapeHTML(q.question)}</div>
+                    <div class="q-meta">
+                        ${typeBadge}
+                        ${diffBadge}
+                        ${imageBadge}
+                        <span>${countText} (正解例: ${escapeHTML(answersPreview)})</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="editQuestion('${q.id}')" style="padding: 6px 12px; font-size: 0.9rem;">編集</button>
+                    <button class="btn btn-danger" onclick="deleteQuestion('${q.id}')" ${deleteBtnAttr} style="padding: 6px 12px; font-size: 0.9rem;">削除</button>
+                </div>
+            `;
+            questionsList.appendChild(item);
+        });
+    }
+
+    window.editQuestion = function(id) {
+        const q = questions.find(item => String(item.id) === String(id));
+        if (!q) return;
+
+        editingId = q.id;
+        questionTextInput.value = q.question;
+
+        let diffValue = q.difficulty || 'lv3';
+        document.getElementById('difficulty').value = diffValue;
+
+        const qType = q.type || 'normal';
+        setFormType(qType);
+
+        if (qType === 'kojien') {
+            const lines = q.answers.map(ansArr => ansArr.join(' / '));
+            kojienAnswersText.value = lines.join('\n');
+        } else {
+            answersArea.innerHTML = '';
+            q.answers.forEach((ansArr, i) => {
+                const subQ = (q.subQuestions && q.subQuestions[i]) ? q.subQuestions[i] : '';
+                const imgData = (q.subImages && q.subImages[i]) ? q.subImages[i] : '';
+                const ansStr = ansArr.join(' / ');
+                createRow(i + 1, subQ, ansStr, imgData);
+            });
+
+            if (q.answers.length < 5) {
+                for (let i = q.answers.length + 1; i <= 5; i++) {
+                    createRow(i);
+                }
+            }
+        }
+
+        document.getElementById('form-title').textContent = '問題を編集する';
+        document.getElementById('submit-btn').textContent = '変更を保存する';
+        cancelEditBtn.style.display = 'block';
+
+        window.scrollTo({ top: questionForm.offsetTop - 20, behavior: 'smooth' });
+    };
+
+    window.deleteQuestion = async function(id) {
+        const q = questions.find(item => String(item.id) === String(id));
+        if (!q) return;
+
+        if (!canDeleteQuestion(q)) {
+            alert('この問題を削除する権限がありません（問題の制作者または管理者のみ可能です）。');
+            return;
+        }
+
+        if (confirm('この問題を削除してもよろしいですか？')) {
+            questions = questions.filter(item => String(item.id) !== String(id));
+            saveQuestions();
+            await saveToSupabase();
+            renderQuestions();
+            if (String(editingId) === String(id)) {
+                clearEditState();
+                questionForm.reset();
+                setFormType('normal');
+                resetAnswersArea();
+            }
+        }
+    };
+
+    window.exportQuestions = function() {
+        if (questions.length === 0) {
+            alert('書き出す問題データがありません。');
+            return;
+        }
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(questions, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `five_bomber_questions_${new Date().toISOString().slice(0,10)}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+    };
+
+    window.importQuestions = function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (Array.isArray(importedData)) {
+                    let addedCount = 0;
+                    importedData.forEach(newQ => {
+                        const isDuplicate = questions.some(existingQ => 
+                            (newQ.id && String(existingQ.id) === String(newQ.id)) || 
+                            (existingQ.question.trim() === newQ.question.trim())
+                        );
+                        if (!isDuplicate) {
+                            if (!newQ.id) {
+                                newQ.id = 'bomber_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                            }
+                            if (!newQ.created_by) {
+                                newQ.created_by = currentUser ? currentUser.id : null;
+                            }
+                            questions.push(newQ);
+                            addedCount++;
+                        }
+                    });
+
+                    saveQuestions();
+                    await saveToSupabase();
+                    renderQuestions();
+                    
+                    if (addedCount > 0) {
+                        alert(`${addedCount} 件の問題をインポートしました！`);
+                    } else {
+                        alert('すべての問題が既に登録されているため、追加されませんでした。');
+                    }
+                } else {
+                    alert('ファイル形式が正しくありません。');
+                }
+            } catch (err) {
+                alert('読み込みに失敗しました。');
+            }
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    function escapeHTML(str) {
+        if (!str) return '';
+        return str.replace(/[&<>'"]/g, 
+            tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+        );
+    }
+</script>
+
+</body>
+</html>
