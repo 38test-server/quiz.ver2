@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>クイズシステム - ポータル</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #f0f4f8;
+            --card-bg: #ffffff;
+            --text-color: #2b2d42;
+            --shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+            --border-radius: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 30px 20px 80px 20px;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* --- ヘッダー・ロゴ --- */
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        #logoContainer {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            max-width: 100%;
+            margin-bottom: 10px;
+            transition: width 0.2s ease, transform 0.2s ease;
+        }
+
+        #logoContainer img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* --- モードセクション --- */
+        .mode-section {
+            margin-bottom: 35px;
+        }
+
+        .section-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            padding-bottom: 6px;
+            border-bottom: 3px solid;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        /* --- アプリカード --- */
+        .app-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--shadow);
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid rgba(0,0,0,0.05);
+            position: relative;
+        }
+
+        .app-card.active:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .app-card.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: #e9ecef;
+        }
+
+        .app-card h3 {
+            font-size: 1.15rem;
+            margin-bottom: 8px;
+            color: #1e293b;
+        }
+
+        .app-card p {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 15px;
+        }
+
+        .badge {
+            align-self: flex-start;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .badge-create {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .badge-play {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .badge-disabled {
+            background: #ced4da;
+            color: #495057;
+        }
+
+        /* --- 左下設定ボタン --- */
+        .settings-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: #2b2d42;
+            color: #fff;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: transform 0.2s, background 0.2s;
+            z-index: 1000;
+        }
+
+        .settings-btn:hover {
+            transform: scale(1.1);
+            background: #1d1e2c;
+        }
+
+        /* --- 設定モーダルUI --- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1001;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-card {
+            background: #fff;
+            border-radius: var(--border-radius);
+            width: 90%;
+            max-width: 650px;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .modal-header h2 {
+            font-size: 1.3rem;
+            color: #2b2d42;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #888;
+        }
+
+        .setting-group {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .setting-group h3 {
+            font-size: 1rem;
+            margin-bottom: 12px;
+            color: #334155;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px; width: 20px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #00b4d8;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        /* モード編集リスト */
+        .mode-item-edit {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border: 1px solid #cbd5e1;
+        }
+
+        .form-row {
+            margin-bottom: 10px;
+        }
+
+        .form-row label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        .form-row input[type="text"], .form-row input[type="email"], .form-row input[type="password"] {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .form-row-inline {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+
+        .btn-primary { background: #00b4d8; color: #fff; }
+        .btn-primary:hover { background: #0077b6; }
+        .btn-success { background: #2ecc71; color: #fff; }
+        .btn-success:hover { background: #27ae60; }
+        .btn-danger { background: #ff4d6d; color: #fff; }
+        .btn-danger:hover { background: #d90429; }
+        .btn-secondary { background: #94a3b8; color: #fff; }
+        .btn-secondary:hover { background: #64748b; }
+
+        .add-mode-btn {
+            width: 100%;
+            padding: 12px;
+            background: #e2e8f0;
+            color: #334155;
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .add-mode-btn:hover {
+            background: #cbd5e1;
+        }
+
+        /* ロゴサイズスライダー */
+        .logo-size-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 8px;
+        }
+
+        .logo-size-controls input[type="range"] {
+            flex: 1;
+            accent-color: #00b4d8;
+            cursor: pointer;
+        }
+
+        .logo-size-val {
+            font-weight: bold;
+            min-width: 45px;
+            text-align: right;
+            font-size: 0.9rem;
+            color: #334155;
+        }
+
+        .auth-status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .status-online { background: #d1fae5; color: #065f46; }
+        .status-offline { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div id="logoContainer"></div>
+    </header>
+
+    <main id="modesContainer"></main>
+</div>
+
+<button class="settings-btn" id="openSettingsBtn" title="設定を開く">⚙️</button>
+
+<div class="modal-overlay" id="settingsModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2>⚙️ システム設定</h2>
+            <button class="close-btn" id="closeSettingsBtn">&times;</button>
+        </div>
+
+        <div class="setting-group">
+            <h3>☁️ クラウド同期・アカウント接続 (Supabase)</h3>
+            <div id="authContainer">
+                </div>
+        </div>
+
+        <div class="setting-group">
+            <h3>📁 設定バックアップ / 復元</h3>
+            <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 10px;">
+                ポータル設定をJSON形式でダウンロード保存したり、保存したJSONを読み込んで復元・マージします。
+            </p>
+            <div class="form-row-inline">
+                <button class="btn btn-success" id="downloadJsonBtn">📥 JSON形式でダウンロード</button>
+                <button class="btn btn-primary" id="uploadJsonBtn">📤 JSONファイルを読み込み</button>
+                <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
+            </div>
+        </div>
+
+        <div class="setting-group">
+            <h3>ロゴマークサイズ設定</h3>
+            <div class="logo-size-controls">
+                <input type="range" id="logoSizeSlider" min="50" max="300" step="10" value="100">
+                <span class="logo-size-val" id="logoSizeVal">100%</span>
+                <button class="btn btn-secondary" id="resetLogoSizeBtn">リセット</button>
+            </div>
+            <p style="font-size: 0.75rem; color: #64748b; margin-top: 6px;">標準サイズは以前の2倍サイズ（100%）に設定されています。</p>
+        </div>
+
+        <div class="setting-group">
+            <h3>表示モード設定</h3>
+            <div class="toggle-container">
+                <span>回答専用モード（制作ツールを非表示）</span>
+                <label class="switch">
+                    <input type="checkbox" id="playOnlyToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="setting-group">
+            <h3>クイズモードの管理・編集</h3>
+            <div id="modeEditList"></div>
+            <button class="add-mode-btn" id="addModeBtn">＋ 新しいモードを追加</button>
+        </div>
+
+        <div style="text-align: right; margin-top: 20px;">
+            <button class="btn btn-primary" id="saveSettingsBtn">設定を保存して閉じる</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Supabaseの初期化
+const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// レコード特定用の固定ID (portal_config)
+const INDEX_RECORD_ID = 'portal_config';
+
+// --- 初期データ ---
+const defaultModes = [
+    {
+        id: "five-league",
+        title: "ファイブリーグ",
+        color: "#00b4d8",
+        createUrl: "ファイブリーグ問題制作用ver1.6.2.html",
+        playUrl: "ファイブリーグ回答用ver1.6.0.html"
+    },
+    {
+        id: "torocco",
+        title: "トロッコアドベンチャー",
+        color: "#e67e22",
+        createUrl: "トロッコアドベンチャー問題制作用.html",
+        playUrl: "トロッコアドベンチャー回答用.html"
+    },
+    {
+        id: "percent-balloon",
+        title: "パーセントバルーン",
+        color: "#e74c3c",
+        createUrl: "",
+        playUrl: ""
+    }
+];
+
+const DEFAULT_LOGO_SIZE = 100;
+
+// --- 状態管理 ---
+let modes = [];
+let isPlayOnly = false;
+let logoSize = DEFAULT_LOGO_SIZE;
+let currentUser = null;
+
+// --- 初期化処理 ---
+window.addEventListener('DOMContentLoaded', async () => {
+    loadSettingsFromLocal();
+    loadLogo();
+    renderHome();
+    setupEventListeners();
+    await checkLoginStatus();
+});
+
+// --- Supabase 認証＆同期処理 ---
+
+// ログイン状態確認
+async function checkLoginStatus() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    currentUser = user;
+    renderAuthUI();
+
+    if (currentUser) {
+        // ログイン済みの場合、Supabaseから index_data を同期読み込み
+        await fetchIndexDataFromSupabase();
+    }
+}
+
+// 認証UIの描画
+function renderAuthUI() {
+    const authContainer = document.getElementById('authContainer');
+    if (!authContainer) return;
+
+    if (currentUser) {
+        authContainer.innerHTML = `
+            <div class="auth-status-badge status-online">🟢 クラウド同期有効 (ログイン中)</div>
+            <p style="font-size:0.85rem; color:#334155; margin-bottom:10px;">アカウント: <strong>${escapeHTML(currentUser.email)}</strong></p>
+            <div class="form-row-inline">
+                <button class="btn btn-secondary" onclick="fetchIndexDataFromSupabase(true)">🔄 クラウドから手動再読み込み</button>
+                <button class="btn btn-danger" onclick="logoutFromSupabase()">ログアウト</button>
+            </div>
+        `;
+    } else {
+        authContainer.innerHTML = `
+            <div class="auth-status-badge status-offline">⚪ オフライン (ローカル保存のみ)</div>
+            <p style="font-size:0.8rem; color:#64748b; margin-bottom:10px;">RLSが authenticated に設定されているため、同期するにはログインが必要です。</p>
+            <div class="form-row">
+                <label>メールアドレス</label>
+                <input type="email" id="authEmail" placeholder="example@email.com">
+            </div>
+            <div class="form-row">
+                <label>パスワード</label>
+                <input type="password" id="authPassword" placeholder="••••••••">
+            </div>
+            <button class="btn btn-primary" onclick="loginToSupabase()">ログインして同期</button>
+        `;
+    }
+}
+
+// ログイン処理
+async function loginToSupabase() {
+    const email = document.getElementById('authEmail').value;
+    const password = document.getElementById('authPassword').value;
+
+    if (!email || !password) {
+        alert("メールアドレスとパスワードを入力してください。");
+        return;
+    }
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: password
+    });
+
+    if (error) {
+        alert("ログインに失敗しました: " + error.message);
+    } else {
+        currentUser = data.user;
+        alert("ログインに成功しました！クラウド同期を有効化します。");
+        renderAuthUI();
+        await fetchIndexDataFromSupabase();
+    }
+}
+
+// ログアウト処理
+async function logoutFromSupabase() {
+    await supabaseClient.auth.signOut();
+    currentUser = null;
+    alert("ログアウトしました。");
+    renderAuthUI();
+}
+
+// Supabase から index_data を取得
+async function fetchIndexDataFromSupabase(isManual = false) {
+    if (!currentUser) return;
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('quiz_data')
+            .select('index_data')
+            .eq('id', INDEX_RECORD_ID)
+            .maybeSingle();
+
+        if (error) {
+            console.error("Supabaseからのデータ取得エラー:", error);
+            if (isManual) alert("クラウドからの読み込みに失敗しました: " + error.message);
+            return;
+        }
+
+        if (data && data.index_data) {
+            const cloudConfig = data.index_data;
+            if (cloudConfig.modes) modes = cloudConfig.modes;
+            if (typeof cloudConfig.isPlayOnly === 'boolean') isPlayOnly = cloudConfig.isPlayOnly;
+            if (cloudConfig.logoSize) logoSize = cloudConfig.logoSize;
+
+            saveSettingsToLocal();
+            renderHome();
+            applyLogoSize(logoSize);
+            updateLogoSizeUI(logoSize);
+            document.getElementById('playOnlyToggle').checked = isPlayOnly;
+
+            if (isManual) alert("クラウドから最新のポータル設定を取得しました！");
+        } else {
+            // クラウドにまだレコードが無い場合は現在のローカル設定を書き込み保存
+            await syncIndexDataToSupabase();
+        }
+    } catch (e) {
+        console.error("取得例外:", e);
+    }
+}
+
+// Supabase へ index_data を保存 (Upsert)
+async function syncIndexDataToSupabase() {
+    if (!currentUser) return;
+
+    const payload = {
+        id: INDEX_RECORD_ID,
+        created_by: currentUser.id,
+        index_data: {
+            modes: modes,
+            isPlayOnly: isPlayOnly,
+            logoSize: logoSize,
+            updatedAt: new Date().toISOString()
+        }
+    };
+
+    const { error } = await supabaseClient
+        .from('quiz_data')
+        .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+        console.error("Supabase同期エラー:", error);
+        alert("クラウドへの保存に失敗しました: " + error.message);
+    } else {
+        console.log("Supabase (index_data) への同期が完了しました。");
+    }
+}
+
+// --- ローカルストレージ処理 ---
+
+function loadSettingsFromLocal() {
+    const savedModes = localStorage.getItem('quiz_portal_modes');
+    const savedPlayOnly = localStorage.getItem('quiz_portal_play_only');
+    const savedLogoSize = localStorage.getItem('quiz_portal_logo_size');
+
+    modes = savedModes ? JSON.parse(savedModes) : defaultModes;
+    isPlayOnly = savedPlayOnly ? JSON.parse(savedPlayOnly) : false;
+    logoSize = savedLogoSize ? parseInt(savedLogoSize, 10) : DEFAULT_LOGO_SIZE;
+
+    document.getElementById('playOnlyToggle').checked = isPlayOnly;
+    updateLogoSizeUI(logoSize);
+}
+
+function saveSettingsToLocal() {
+    localStorage.setItem('quiz_portal_modes', JSON.stringify(modes));
+    localStorage.setItem('quiz_portal_play_only', JSON.stringify(isPlayOnly));
+    localStorage.setItem('quiz_portal_logo_size', logoSize.toString());
+}
+
+// --- 設定保存統合（ローカル ＋ Supabase） ---
+
+async function saveSettings() {
+    saveSettingsToLocal();
+    if (currentUser) {
+        await syncIndexDataToSupabase();
+    }
+    renderHome();
+    document.getElementById('settingsModal').style.display = 'none';
+}
+
+// --- JSONダウンロード機能 ---
+function downloadIndexDataJson() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}${month}${day}`;
+
+    const filename = `index_data_${dateStr}.json`;
+
+    const indexDataObj = {
+        modes: modes,
+        isPlayOnly: isPlayOnly,
+        logoSize: logoSize,
+        exportedAt: now.toISOString()
+    };
+
+    const jsonStr = JSON.stringify(indexDataObj, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// --- JSON読み込み（インポート）機能 ---
+function uploadIndexDataJson(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        try {
+            const imported = JSON.parse(evt.target.result);
+
+            let addedCount = 0;
+            let skippedCount = 0;
+
+            // 1. モードのマージ（同じタイトルのものがない場合のみ追加）
+            if (imported.modes && Array.isArray(imported.modes)) {
+                imported.modes.forEach(impMode => {
+                    if (!impMode.title) return;
+                    
+                    const exists = modes.some(m => m.title === impMode.title);
+                    if (!exists) {
+                        modes.push(impMode);
+                        addedCount++;
+                    } else {
+                        skippedCount++;
+                    }
+                });
+            }
+
+            // 2. その他の設定値は上書き更新
+            if (typeof imported.isPlayOnly === 'boolean') {
+                isPlayOnly = imported.isPlayOnly;
+                document.getElementById('playOnlyToggle').checked = isPlayOnly;
+            }
+
+            if (imported.logoSize && typeof imported.logoSize === 'number') {
+                logoSize = imported.logoSize;
+                applyLogoSize(logoSize);
+                updateLogoSizeUI(logoSize);
+            }
+
+            // 画面反映・編集リスト更新
+            renderSettingsEditList();
+            
+            alert(`JSONの読み込みが完了しました！\n・追加された新モード: ${addedCount}件\n・重複のためスキップ: ${skippedCount}件\n\n「設定を保存して閉じる」を押すと変更が保存・同期されます。`);
+        } catch (err) {
+            alert("JSONファイルの読み込みに失敗しました。ファイル形式を確認してください。");
+            console.error(err);
+        } finally {
+            e.target.value = ''; // 入力をリセット
+        }
+    };
+    reader.readAsText(file);
+}
+
+// --- ロゴ・画面描画ユーティリティ ---
+
+function loadLogo() {
+    const logoContainer = document.getElementById('logoContainer');
+    const logoUrl = 'https://vnnuqbndesdemwacneqf.supabase.co/storage/v1/object/sign/Required%20Materials/logo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV83ZDI5NWIzNC05YTlhLTQyYjMtOWYzMy03NzU2YTA2YzNlYTgiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJSZXF1aXJlZCBNYXRlcmlhbHMvbG9nby5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg1OTgyNTY4LCJleHAiOjE4MTc1MTg1Njh9.r4LmyYHTUb_O_cLgI8PWBoyqaU6-E8eRiCTOO2WHXfo';
+
+    const img = new Image();
+    img.onload = () => {
+        img.alt = 'クイズシステム ロゴ';
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        logoContainer.innerHTML = '';
+        logoContainer.appendChild(img);
+        applyLogoSize(logoSize);
+    };
+
+    img.onerror = () => {
+        logoContainer.innerHTML = '<h1 style="font-size: 2.5rem; color:#00b4d8;">クイズシステム</h1>';
+    };
+
+    img.src = logoUrl;
+}
+
+function applyLogoSize(percent) {
+    const logoContainer = document.getElementById('logoContainer');
+    const img = logoContainer.querySelector('img');
+    
+    const baseHeight = 240;
+    const targetHeight = Math.round((baseHeight * percent) / 100);
+
+    if (img) {
+        img.style.maxHeight = `${targetHeight}px`;
+    }
+}
+
+function updateLogoSizeUI(val) {
+    document.getElementById('logoSizeSlider').value = val;
+    document.getElementById('logoSizeVal').textContent = `${val}%`;
+}
+
+function renderHome() {
+    const container = document.getElementById('modesContainer');
+    container.innerHTML = '';
+
+    modes.forEach(mode => {
+        const section = document.createElement('section');
+        section.className = 'mode-section';
+
+        const themeColor = mode.color || '#00b4d8';
+
+        const title = document.createElement('h2');
+        title.className = 'section-title';
+        title.style.color = themeColor;
+        title.style.borderColor = themeColor;
+        title.textContent = mode.title;
+        section.appendChild(title);
+
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+
+        if (!isPlayOnly) {
+            const createCard = createCardElement(
+                `${mode.title} 問題制作`,
+                '問題データの追加・編集・JSON出力',
+                '制作ツール',
+                'badge-create',
+                mode.createUrl,
+                themeColor
+            );
+            grid.appendChild(createCard);
+        }
+
+        const playCard = createCardElement(
+            `${mode.title} 回答システム`,
+            '問題データを読み込んでプレイを開始',
+            '回答ツール',
+            'badge-play',
+            mode.playUrl,
+            themeColor
+        );
+        grid.appendChild(playCard);
+
+        section.appendChild(grid);
+        container.appendChild(section);
+    });
+}
+
+function createCardElement(title, desc, badgeText, badgeClass, url, color) {
+    const a = document.createElement('a');
+    const isReady = url && url.trim() !== "";
+
+    if (isReady) {
+        a.className = 'app-card active';
+        a.href = url;
+        a.target = '_blank';
+        a.style.borderTop = `4px solid ${color}`;
+    } else {
+        a.className = 'app-card disabled';
+        a.href = 'javascript:void(0)';
+    }
+
+    a.innerHTML = `
+        <div>
+            <span class="badge ${isReady ? badgeClass : 'badge-disabled'}">
+                ${isReady ? badgeText : '準備中'}
+            </span>
+            <h3 style="margin-top:10px;">${title}</h3>
+            <p>${isReady ? desc : '設定画面から同期するファイルURL（パス）を指定してください。'}</p>
+        </div>
+    `;
+    return a;
+}
+
+function renderSettingsEditList() {
+    const listContainer = document.getElementById('modeEditList');
+    listContainer.innerHTML = '';
+
+    modes.forEach((mode, index) => {
+        const item = document.createElement('div');
+        item.className = 'mode-item-edit';
+        item.innerHTML = `
+            <div class="form-row">
+                <label>モードタイトル</label>
+                <input type="text" value="${escapeHTML(mode.title)}" onchange="updateMode(${index}, 'title', this.value)">
+            </div>
+            <div class="form-row-inline" style="margin-bottom: 10px;">
+                <div style="flex:1;">
+                    <label>テーマカラー</label>
+                    <input type="color" value="${mode.color || '#00b4d8'}" style="width:100%; height:36px; border:none; cursor:pointer;" onchange="updateMode(${index}, 'color', this.value)">
+                </div>
+                <div style="align-self: flex-end;">
+                    <button class="btn btn-danger" onclick="deleteMode(${index})">削除</button>
+                </div>
+            </div>
+            <div class="form-row">
+                <label>制作用ファイル (URL / パス)</label>
+                <input type="text" value="${escapeHTML(mode.createUrl || '')}" placeholder="例: ○○問題制作用.html (空欄で準備中)" onchange="updateMode(${index}, 'createUrl', this.value)">
+            </div>
+            <div class="form-row">
+                <label>回答用ファイル (URL / パス)</label>
+                <input type="text" value="${escapeHTML(mode.playUrl || '')}" placeholder="例: ○○回答用.html (空欄で準備中)" onchange="updateMode(${index}, 'playUrl', this.value)">
+            </div>
+        `;
+        listContainer.appendChild(item);
+    });
+}
+
+// --- イベント＆操作関数 ---
+
+function setupEventListeners() {
+    const modal = document.getElementById('settingsModal');
+    const slider = document.getElementById('logoSizeSlider');
+    const resetBtn = document.getElementById('resetLogoSizeBtn');
+    
+    document.getElementById('openSettingsBtn').onclick = () => {
+        renderSettingsEditList();
+        updateLogoSizeUI(logoSize);
+        renderAuthUI();
+        modal.style.display = 'flex';
+    };
+
+    document.getElementById('closeSettingsBtn').onclick = () => {
+        modal.style.display = 'none';
+    };
+
+    document.getElementById('downloadJsonBtn').onclick = downloadIndexDataJson;
+
+    // JSON読み込みイベントの設定
+    const fileInput = document.getElementById('jsonFileInput');
+    document.getElementById('uploadJsonBtn').onclick = () => fileInput.click();
+    fileInput.onchange = uploadIndexDataJson;
+
+    slider.oninput = (e) => {
+        logoSize = parseInt(e.target.value, 10);
+        updateLogoSizeUI(logoSize);
+        applyLogoSize(logoSize);
+    };
+
+    resetBtn.onclick = () => {
+        logoSize = DEFAULT_LOGO_SIZE;
+        updateLogoSizeUI(logoSize);
+        applyLogoSize(logoSize);
+    };
+
+    document.getElementById('addModeBtn').onclick = () => {
+        modes.push({
+            id: 'mode-' + Date.now(),
+            title: '新しいモード',
+            color: '#2b2d42',
+            createUrl: '',
+            playUrl: ''
+        });
+        renderSettingsEditList();
+    };
+
+    document.getElementById('playOnlyToggle').onchange = (e) => {
+        isPlayOnly = e.target.checked;
+    };
+
+    document.getElementById('saveSettingsBtn').onclick = saveSettings;
+}
+
+window.updateMode = function(index, key, value) {
+    modes[index][key] = value;
+};
+
+window.deleteMode = function(index) {
+    const targetTitle = modes[index].title || 'このモード';
+    const confirmText = prompt(`【削除確認】\n本当に「${targetTitle}」を削除しますか？\n削除する場合は、確認のため「削除」と入力してください。`);
+    
+    if (confirmText === "削除") {
+        modes.splice(index, 1);
+        renderSettingsEditList();
+    } else if (confirmText !== null) {
+        alert('入力が一致しなかったため、削除をキャンセルしました。');
+    }
+};
+
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag] || tag));
+}
+</script>
+
+</body>
+</html>
