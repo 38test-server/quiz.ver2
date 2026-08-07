@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>トロッコアドベンチャー - 問題制作ツール</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg-color: #1f140e;
+      --card-bg: #2d1d15;
+      --card-border: #4d3324;
+      --accent-color: #d4a359;
+      --accent-hover: #e8b86d;
+      --accent-active: #b88a42;
+      --danger-color: #a93226;
+      --danger-hover: #cd6155;
+      --text-main: #f8f9fa;
+      --text-sub: #cbb9a8;
+      --input-bg: #140c08;
+      --input-border: #5c3e2b;
+      --success-color: #27ae60;
+      --lv1-color: #2980b9;
+      --lv2-color: #8e44ad;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", MeiRyo, sans-serif;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid var(--card-border);
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      color: var(--accent-color);
+      letter-spacing: 1px;
+    }
+
+    p.subtitle {
+      font-size: 0.9rem;
+      color: var(--text-sub);
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 25px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-title {
+      font-size: 1.2rem;
+      color: var(--accent-color);
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: bold;
+      color: var(--text-sub);
+      font-size: 0.95rem;
+    }
+
+    .required {
+      color: #e74c3c;
+      margin-left: 4px;
+    }
+
+    textarea, input[type="text"], input[type="email"], input[type="password"], select {
+      width: 100%;
+      padding: 10px;
+      background-color: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 4px;
+      color: var(--text-main);
+      font-size: 1rem;
+    }
+
+    textarea:focus, input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .choices-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    @media (max-width: 600px) {
+      .choices-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .choice-box {
+      background-color: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .choice-box h3 {
+      font-size: 1rem;
+      color: var(--accent-color);
+      margin-bottom: 10px;
+    }
+
+    .img-preview {
+      margin-top: 8px;
+      max-width: 100%;
+      max-height: 120px;
+      object-fit: contain;
+      display: block;
+      border-radius: 4px;
+      border: 1px dashed var(--input-border);
+    }
+
+    .img-preview[src=""] {
+      display: none;
+    }
+
+    .correct-selector {
+      margin-top: 15px;
+      background: rgba(0,0,0,0.2);
+      padding: 12px;
+      border-radius: 6px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .radio-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      color: var(--text-main);
+    }
+
+    .btn {
+      background-color: var(--accent-color);
+      color: #111;
+      font-weight: bold;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background-color: var(--accent-hover);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn-danger {
+      background-color: var(--danger-color);
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background-color: var(--danger-hover);
+    }
+
+    .btn-secondary {
+      background-color: #555;
+      color: #fff;
+    }
+
+    .btn-secondary:hover {
+      background-color: #666;
+    }
+
+    .actions-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .question-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .question-item {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .q-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 8px;
+    }
+
+    .q-text {
+      font-size: 1.1rem;
+      font-weight: bold;
+      white-space: pre-wrap;
+    }
+
+    .q-choices {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .q-choice {
+      background: var(--input-bg);
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      font-size: 0.9rem;
+    }
+
+    .q-choice.is-correct {
+      border-color: var(--success-color);
+      background: rgba(39, 174, 96, 0.1);
+    }
+
+    .correct-badge {
+      display: inline-block;
+      background: var(--success-color);
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-bottom: 4px;
+    }
+
+    .level-badge {
+      display: inline-block;
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-weight: bold;
+      margin-right: 6px;
+    }
+    .level-badge.lv1 { background-color: var(--lv1-color); }
+    .level-badge.lv2 { background-color: var(--lv2-color); }
+
+    .q-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    input[type="file"] {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+    }
+
+    .clear-img-btn {
+      font-size: 0.75rem;
+      color: #e74c3c;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      margin-top: 4px;
+      display: none;
+    }
+
+    .auth-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .status-online { background: #27ae60; color: #fff; }
+    .status-offline { background: #a93226; color: #fff; }
+
+    /* 検索フィルターエリアのスタイル */
+    .search-bar-container {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      background: rgba(0,0,0,0.2);
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid var(--input-border);
+    }
+
+    .search-input-box {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .search-filter-box {
+      min-width: 170px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>トロッコアドベンチャー - 問題制作</h1>
+      <p class="subtitle">問題データの作成・編集・JSON保存/読み込み・クラウド同期</p>
+    </header>
+
+    <div class="card">
+      <div class="card-title">☁️ クラウド同期・アカウントログイン (Supabase)</div>
+      <div id="authContainer"></div>
+    </div>
+
+    <div class="actions-bar">
+      <button class="btn" onclick="exportJSON()">JSON書き出し</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">JSON読み込み</button>
+      <button class="btn btn-secondary" onclick="fetchQuestionsFromSupabase(true)">🔄 クラウドから問題再読み込み</button>
+      <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importJSON(event)">
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span id="formTitle">新しい問題を作成</span>
+        <button id="cancelEditBtn" class="btn btn-secondary" style="display:none;" onclick="resetForm()">編集をキャンセル</button>
+      </div>
+
+      <form id="questionForm" onsubmit="handleFormSubmit(event)">
+        <input type="hidden" id="editId" value="">
+
+        <div class="form-group">
+          <label>難易度 <span class="required">*</span></label>
+          <div style="display: flex; gap: 20px; background: var(--input-bg); padding: 10px; border-radius: 4px; border: 1px solid var(--input-border);">
+            <label class="radio-label">
+              <input type="radio" name="questionLevel" value="lv1" checked> Level 1 (レベル1)
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="questionLevel" value="lv2"> Level 2 (レベル2)
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="questionText">問題文 <span class="required">*</span></label>
+          <textarea id="questionText" placeholder="例: 日本で一番高い山は？" required></textarea>
+        </div>
+
+        <div class="choices-grid">
+          <div class="choice-box">
+            <h3>選択肢 1 (左)</h3>
+            <div class="form-group">
+              <label for="choice1Text">テキスト</label>
+              <input type="text" id="choice1Text" placeholder="例: 富士山">
+            </div>
+            <div class="form-group">
+              <label>画像 (自動的に横幅600pxに圧縮されます)</label>
+              <input type="file" id="choice1Image" accept="image/*" onchange="handleImageSelect(event, 1)">
+              <button type="button" id="clearImg1" class="clear-img-btn" onclick="clearImage(1)">画像を削除</button>
+              <img id="preview1" class="img-preview" src="" alt="プレビュー">
+            </div>
+          </div>
+
+          <div class="choice-box">
+            <h3>選択肢 2 (右)</h3>
+            <div class="form-group">
+              <label for="choice2Text">テキスト</label>
+              <input type="text" id="choice2Text" placeholder="例: 北岳">
+            </div>
+            <div class="form-group">
+              <label>画像 (自動的に横幅600pxに圧縮されます)</label>
+              <input type="file" id="choice2Image" accept="image/*" onchange="handleImageSelect(event, 2)">
+              <button type="button" id="clearImg2" class="clear-img-btn" onclick="clearImage(2)">画像を削除</button>
+              <img id="preview2" class="img-preview" src="" alt="プレビュー">
+            </div>
+          </div>
+        </div>
+
+        <div class="correct-selector">
+          <label style="margin: 0;">正解の選択肢 <span class="required">*</span>:</label>
+          <label class="radio-label">
+            <input type="radio" name="correctAnswer" value="1" required> 選択肢 1 (左)
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="correctAnswer" value="2"> 選択肢 2 (右)
+          </label>
+        </div>
+
+        <div style="margin-top: 20px; text-align: right;">
+          <button type="submit" id="submitBtn" class="btn">問題を登録する</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>登録済み問題一覧 (<span id="qCount">0</span>問)</span>
+      </div>
+
+      <div class="search-bar-container">
+        <div class="search-input-box">
+          <input type="text" id="searchKeyword" placeholder="🔍 問題文や選択肢を検索..." oninput="renderQuestions()">
+        </div>
+        <div class="search-filter-box">
+          <select id="imageFilter" onchange="renderQuestions()">
+            <option value="all">画像指定なし</option>
+            <option value="has_image">画像あり</option>
+            <option value="no_image">画像なし</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="questionList" class="question-list">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Supabaseの設定 ---
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ★管理者（あなた）のメールアドレスを設定してください
+    const ADMIN_EMAIL = 's50251050@hiroshima-u.ed.jp'; 
+
+    // レコード識別用ID (quiz_data テーブル内での行ID)
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    // 問題データの保存配列
+    let questions = [];
+    
+    // 一時保持用ベース64画像
+    let currentImage1 = "";
+    let currentImage2 = "";
+
+    // 認証ユーザー状態
+    let currentUser = null;
+
+    // 初期化
+    window.addEventListener('DOMContentLoaded', async () => {
+      loadFromLocalStorage();
+      renderQuestions();
+
+      // Supabaseの認証状態の変化（ページロード時のセッション復元含む）を監視
+      supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        currentUser = session ? session.user : null;
+        renderAuthUI();
+
+        if (currentUser) {
+          await fetchQuestionsFromSupabase();
+        } else {
+          renderQuestions();
+        }
+      });
+    });
+
+    // --- Supabase認証 関連 ---
+    function renderAuthUI() {
+      const container = document.getElementById('authContainer');
+      if (!container) return;
+
+      if (currentUser) {
+        const isAdmin = currentUser.email === ADMIN_EMAIL;
+        container.innerHTML = `
+          <div class="auth-badge status-online">🟢 ログイン中 (${escapeHTML(currentUser.email)}${isAdmin ? ' / 管理者' : ''})</div>
+          <p style="font-size:0.85rem; color:var(--text-sub); margin-bottom:10px;">クラウド同期が有効です。問題の閲覧・追加・編集が可能です。</p>
+          <button class="btn btn-secondary" onclick="logoutFromSupabase()">ログアウト</button>
+        `;
+      } else {
+        container.innerHTML = `
+          <div class="auth-badge status-offline">⚪ オフライン (ローカルのみ)</div>
+          <p style="font-size:0.85rem; color:var(--text-sub); margin-bottom:10px;">クラウドに問題を保存・同期するにはログインが必要です。</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+            <input type="email" id="authEmail" placeholder="メールアドレス" style="flex:1; min-width:200px;">
+            <input type="password" id="authPassword" placeholder="パスワード" style="flex:1; min-width:150px;">
+          </div>
+          <button class="btn" onclick="loginToSupabase()">ログインして同期</button>
+        `;
+      }
+    }
+
+    async function loginToSupabase() {
+      const email = document.getElementById('authEmail').value;
+      const password = document.getElementById('authPassword').value;
+
+      if (!email || !password) {
+        alert("メールアドレスとパスワードを入力してください。");
+        return;
+      }
+
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email, password
+      });
+
+      if (error) {
+        alert("ログインに失敗しました: " + error.message);
+      } else {
+        alert("ログインに成功しました。");
+      }
+    }
+
+    async function logoutFromSupabase() {
+      await supabaseClient.auth.signOut();
+      alert("ログアウトしました。");
+    }
+
+    // --- Supabase データ同期処理 (quiz_data テーブルの torokko カラムを使用) ---
+    async function fetchQuestionsFromSupabase(isManual = false) {
+      if (!currentUser) {
+        if (isManual) alert("ログインが必要です。");
+        return;
+      }
+
+      try {
+        const { data, error } = await supabaseClient
+          .from('quiz_data')
+          .select('torokko')
+          .eq('id', QUIZ_DATA_ROW_ID)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = 行が見つからない場合
+          console.error("Supabase読み込みエラー:", error);
+          if (isManual) alert("データの取得に失敗しました: " + error.message);
+          return;
+        }
+
+        if (data && data.torokko) {
+          questions = Array.isArray(data.torokko) ? data.torokko : [];
+          saveToLocalStorage();
+          renderQuestions();
+          if (isManual) alert("クラウドから最新の問題を取得しました。");
+        } else {
+          if (isManual) alert("クラウドに保存された問題はありませんでした。");
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Supabaseへ配列全体を一括同期保存するヘルパー関数
+    async function syncAllToSupabase() {
+      if (!currentUser) return true;
+
+      const { error } = await supabaseClient
+        .from('quiz_data')
+        .upsert({
+          id: QUIZ_DATA_ROW_ID,
+          torokko: questions,
+          created_by: currentUser.id
+        }, { onConflict: 'id' });
+
+      if (error) {
+        alert("クラウドへの保存に失敗しました: " + error.message);
+        return false;
+      }
+      return true;
+    }
+
+    // --- LocalStorage 処理 ---
+    function loadFromLocalStorage() {
+      const data = localStorage.getItem('torokko_questions');
+      if (data) {
+        try {
+          questions = JSON.parse(data);
+        } catch (e) {
+          console.error('Failed to parse localStorage data', e);
+          questions = [];
+        }
+      }
+    }
+
+    function saveToLocalStorage() {
+      localStorage.setItem('torokko_questions', JSON.stringify(questions));
+    }
+
+    // 画像縮小関数
+    function resizeImage(file, maxWidth = 600) {
+      return new Promise((resolve, reject) => {
+        if (!file) return resolve("");
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+          };
+          img.onerror = reject;
+          img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleImageSelect(event, choiceNum) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const base64 = await resizeImage(file, 600);
+        if (choiceNum === 1) {
+          currentImage1 = base64;
+          document.getElementById('preview1').src = base64;
+          document.getElementById('clearImg1').style.display = 'inline-block';
+        } else {
+          currentImage2 = base64;
+          document.getElementById('preview2').src = base64;
+          document.getElementById('clearImg2').style.display = 'inline-block';
+        }
+      } catch (err) {
+        alert('画像の読み込みに失敗しました。');
+      }
+    }
+
+    function clearImage(choiceNum) {
+      if (choiceNum === 1) {
+        currentImage1 = "";
+        document.getElementById('choice1Image').value = "";
+        document.getElementById('preview1').src = "";
+        document.getElementById('clearImg1').style.display = 'none';
+      } else {
+        currentImage2 = "";
+        document.getElementById('choice2Image').value = "";
+        document.getElementById('preview2').src = "";
+        document.getElementById('clearImg2').style.display = 'none';
+      }
+    }
+
+    // フォーム送信（新規登録 / 更新）
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+
+      const qLevel = document.querySelector('input[name="questionLevel"]:checked')?.value || 'lv1';
+      const qText = document.getElementById('questionText').value.trim();
+      const c1Text = document.getElementById('choice1Text').value.trim();
+      const c2Text = document.getElementById('choice2Text').value.trim();
+      const correctAnswer = document.querySelector('input[name="correctAnswer"]:checked')?.value;
+      const editId = document.getElementById('editId').value;
+
+      if (!c1Text && !currentImage1) {
+        alert('選択肢1には「テキスト」または「画像」のいずれかを入力してください。');
+        return;
+      }
+      if (!c2Text && !currentImage2) {
+        alert('選択肢2には「テキスト」または「画像」のいずれかを入力してください。');
+        return;
+      }
+      if (!correctAnswer) {
+        alert('正解の選択肢を指定してください。');
+        return;
+      }
+
+      const recordId = editId || 'torokko_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+      const qData = {
+        id: recordId,
+        level: qLevel,
+        questionText: qText,
+        choice1: {
+          text: c1Text,
+          image: currentImage1
+        },
+        choice2: {
+          text: c2Text,
+          image: currentImage2
+        },
+        correctAnswer: parseInt(correctAnswer, 10),
+        created_by: currentUser ? currentUser.id : null
+      };
+
+      if (editId) {
+        const index = questions.findIndex(q => q.id === editId);
+        if (index !== -1) {
+          questions[index] = qData;
+        }
+      } else {
+        questions.push(qData);
+      }
+
+      // Supabaseへ同期保存
+      const success = await syncAllToSupabase();
+      if (!success) return;
+
+      saveToLocalStorage();
+      renderQuestions();
+      resetForm();
+    }
+
+    // 問題一覧描画
+    function renderQuestions() {
+      const container = document.getElementById('questionList');
+      
+      // 検索キーワード・画像フィルター値の取得
+      const keyword = (document.getElementById('searchKeyword')?.value || '').trim().toLowerCase();
+      const imgFilter = document.getElementById('imageFilter')?.value || 'all';
+
+      // 検索条件による問題データの絞り込み
+      const filteredQuestions = questions.filter(q => {
+        // キーワード検索（問題文、選択肢1テキスト、選択肢2テキスト）
+        const qText = (q.questionText || '').toLowerCase();
+        const c1Text = (q.choice1 && q.choice1.text ? q.choice1.text : '').toLowerCase();
+        const c2Text = (q.choice2 && q.choice2.text ? q.choice2.text : '').toLowerCase();
+
+        const matchKeyword = !keyword || 
+          qText.includes(keyword) || 
+          c1Text.includes(keyword) || 
+          c2Text.includes(keyword);
+
+        // 画像有無フィルター判定
+        const hasImage = !!((q.choice1 && q.choice1.image) || (q.choice2 && q.choice2.image));
+        let matchImage = true;
+        if (imgFilter === 'has_image') {
+          matchImage = hasImage;
+        } else if (imgFilter === 'no_image') {
+          matchImage = !hasImage;
+        }
+
+        return matchKeyword && matchImage;
+      });
+
+      // 問題数の表示更新（絞り込み時は「ヒット数 / 全体数」で表示）
+      const qCountElem = document.getElementById('qCount');
+      if (qCountElem) {
+        if (keyword || imgFilter !== 'all') {
+          qCountElem.textContent = `${filteredQuestions.length} / ${questions.length}`;
+        } else {
+          qCountElem.textContent = questions.length;
+        }
+      }
+
+      if (questions.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-sub); text-align: center;">登録された問題はありません。</p>';
+        return;
+      }
+
+      if (filteredQuestions.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-sub); text-align: center;">検索条件に一致する問題は見つかりませんでした。</p>';
+        return;
+      }
+
+      container.innerHTML = filteredQuestions.map(q => {
+        // 全体配列における通し番号を取得
+        const originalIdx = questions.findIndex(item => item.id === q.id);
+        const displayIdx = originalIdx !== -1 ? originalIdx + 1 : '';
+
+        const level = q.level || 'lv1';
+        const levelLabel = level === 'lv2' ? 'Lv.2' : 'Lv.1';
+
+        // 削除ボタン権限判定（管理者または制作者本人のみ）
+        const canDelete = currentUser && (
+          currentUser.email === ADMIN_EMAIL ||
+          (q.created_by && q.created_by === currentUser.id)
+        );
+
+        return `
+        <div class="question-item">
+          <div class="q-header">
+            <div class="q-text">
+              <span class="level-badge ${level}">${levelLabel}</span>Q${displayIdx}. ${escapeHTML(q.questionText)}
+            </div>
+            <div class="q-actions">
+              <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.85rem;" onclick="editQuestion('${q.id}')">編集</button>
+              ${canDelete ? `
+                <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.85rem;" onclick="deleteQuestion('${q.id}')">削除</button>
+              ` : ''}
+            </div>
+          </div>
+          <div class="q-choices">
+            <div class="q-choice ${q.correctAnswer === 1 ? 'is-correct' : ''}">
+              ${q.correctAnswer === 1 ? '<span class="correct-badge">正解</span>' : ''}
+              <div><strong>[選択肢1 (左)]</strong></div>
+              ${q.choice1.text ? `<div>${escapeHTML(q.choice1.text)}</div>` : ''}
+              ${q.choice1.image ? `<img src="${q.choice1.image}" class="img-preview" style="display:block; margin-top:5px;">` : ''}
+            </div>
+            <div class="q-choice ${q.correctAnswer === 2 ? 'is-correct' : ''}">
+              ${q.correctAnswer === 2 ? '<span class="correct-badge">正解</span>' : ''}
+              <div><strong>[選択肢2 (右)]</strong></div>
+              ${q.choice2.text ? `<div>${escapeHTML(q.choice2.text)}</div>` : ''}
+              ${q.choice2.image ? `<img src="${q.choice2.image}" class="img-preview" style="display:block; margin-top:5px;">` : ''}
+            </div>
+          </div>
+        </div>
+        `;
+      }).join('');
+    }
+
+    function editQuestion(id) {
+      const q = questions.find(item => item.id === id);
+      if (!q) return;
+
+      document.getElementById('editId').value = q.id;
+
+      const levelRadio = document.querySelector(`input[name="questionLevel"][value="${q.level || 'lv1'}"]`);
+      if (levelRadio) levelRadio.checked = true;
+
+      document.getElementById('questionText').value = q.questionText;
+      document.getElementById('choice1Text').value = q.choice1.text || '';
+      document.getElementById('choice2Text').value = q.choice2.text || '';
+
+      currentImage1 = q.choice1.image || '';
+      document.getElementById('preview1').src = currentImage1;
+      document.getElementById('clearImg1').style.display = currentImage1 ? 'inline-block' : 'none';
+
+      currentImage2 = q.choice2.image || '';
+      document.getElementById('preview2').src = currentImage2;
+      document.getElementById('clearImg2').style.display = currentImage2 ? 'inline-block' : 'none';
+
+      const radio = document.querySelector(`input[name="correctAnswer"][value="${q.correctAnswer}"]`);
+      if (radio) radio.checked = true;
+
+      document.getElementById('formTitle').textContent = '問題を編集';
+      document.getElementById('submitBtn').textContent = '変更を更新する';
+      document.getElementById('cancelEditBtn').style.display = 'inline-block';
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteQuestion(id) {
+      if (!confirm('この問題を削除してもよろしいですか？')) return;
+
+      questions = questions.filter(q => q.id !== id);
+
+      // Supabaseへ同期保存
+      const success = await syncAllToSupabase();
+      if (!success) return;
+
+      saveToLocalStorage();
+      renderQuestions();
+    }
+
+    function resetForm() {
+      document.getElementById('questionForm').reset();
+      document.getElementById('editId').value = '';
+      
+      const defaultLevelRadio = document.querySelector('input[name="questionLevel"][value="lv1"]');
+      if (defaultLevelRadio) defaultLevelRadio.checked = true;
+
+      currentImage1 = '';
+      currentImage2 = '';
+      document.getElementById('preview1').src = '';
+      document.getElementById('preview2').src = '';
+      document.getElementById('clearImg1').style.display = 'none';
+      document.getElementById('clearImg2').style.display = 'none';
+
+      document.getElementById('formTitle').textContent = '新しい問題を作成';
+      document.getElementById('submitBtn').textContent = '問題を登録する';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+    }
+
+    function exportJSON() {
+      if (questions.length === 0) {
+        alert('書き出す問題がありません。');
+        return;
+      }
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(questions, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `torokko_questions_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function importJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const importedData = JSON.parse(e.target.result);
+          if (!Array.isArray(importedData)) {
+            alert('無効なJSONフォーマットです。(配列形式でありません)');
+            return;
+          }
+
+          let addedCount = 0;
+
+          for (const importedItem of importedData) {
+            const importedLevel = importedItem.level || 'lv1';
+
+            const isDuplicate = questions.some(existingItem => 
+              (existingItem.level || 'lv1') === importedLevel &&
+              existingItem.questionText === importedItem.questionText &&
+              existingItem.correctAnswer === importedItem.correctAnswer &&
+              (existingItem.choice1.text || '') === (importedItem.choice1.text || '') &&
+              (existingItem.choice1.image || '') === (importedItem.choice1.image || '') &&
+              (existingItem.choice2.text || '') === (importedItem.choice2.text || '') &&
+              (existingItem.choice2.image || '') === (importedItem.choice2.image || '')
+            );
+
+            if (!isDuplicate) {
+              const recordId = importedItem.id || 'torokko_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+              const newItem = {
+                ...importedItem,
+                level: importedLevel,
+                id: recordId,
+                created_by: currentUser ? currentUser.id : null
+              };
+
+              questions.push(newItem);
+              addedCount++;
+            }
+          }
+
+          // Supabaseへ保存
+          await syncAllToSupabase();
+
+          saveToLocalStorage();
+          renderQuestions();
+          alert(`読み込み完了: ${addedCount} 件の新しい問題を追加しました。(重複 ${importedData.length - addedCount} 件スキップ)`);
+        } catch (err) {
+          alert('JSONファイルの読み込みに失敗しました。ファイル形式を確認してください。');
+        }
+        event.target.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.replace(/[&<>'"]/g, 
+        tag => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#39;',
+          '"': '&quot;'
+        }[tag] || tag)
+      );
+    }
+  </script>
+</body>
+</html>
