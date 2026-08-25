@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ロゴファクトリー問題作成ツール (Backyard)</title>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      /* バックヤード風配色：濃い灰色ベース × 薄灰色カード × アクセント（青・黄） */
+      --bg-color: #2b303a;
+      --card-bg: #e2e8f0;
+      --card-text: #1a202c;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --accent-yellow: #eab308;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --border-color: #cbd5e1;
+      --danger: #ef4444;
+    }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: #1e293b;
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      border: 1px solid #334155;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #60a5fa;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h1::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 24px;
+      background: var(--accent-yellow);
+      border-radius: 2px;
+    }
+
+    .auth-box {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input[type="text"], input[type="email"], input[type="password"] {
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 0.9rem;
+      background: #ffffff;
+      color: #0f172a;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-accent { background: var(--accent-yellow); color: #0f172a; }
+    .btn-accent:hover { background: #ca8a04; color: white; }
+    .btn-outline { background: #ffffff; border: 1px solid var(--border-color); color: #334155; }
+    .btn-outline:hover { background: #f1f5f9; }
+    .btn-danger { background: var(--danger); color: white; }
+
+    .card {
+      background: var(--card-bg);
+      color: var(--card-text);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      margin-top: 0;
+      color: #0f172a;
+      border-bottom: 2px solid #cbd5e1;
+      padding-bottom: 8px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      color: #334155;
+    }
+
+    .mode-selector {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .editor-wrapper {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      border: 2px dashed #94a3b8;
+      background: #f1f5f9;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+
+    #sourceImage {
+      max-width: 100%;
+      display: block;
+    }
+
+    #selectionCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      cursor: crosshair;
+    }
+
+    .crops-preview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .crop-item {
+      position: relative;
+      border: 2px solid var(--primary);
+      border-radius: 4px;
+      padding: 4px;
+      background: #ffffff;
+    }
+
+    .crop-item img {
+      height: 80px;
+      display: block;
+    }
+
+    .crop-item .btn-remove {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: var(--danger);
+      color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 12px;
+      line-height: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .list-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .quiz-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .quiz-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 15px;
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+    }
+
+    .quiz-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .quiz-answers {
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    .quiz-crops-mini {
+      display: flex;
+      gap: 5px;
+    }
+
+    .quiz-crops-mini img {
+      height: 35px;
+      border: 1px solid #cbd5e1;
+      border-radius: 3px;
+    }
+
+    .json-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .badge-admin {
+      background: var(--accent-yellow);
+      color: #0f172a;
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- ヘッダー＆Supabase接続情報 -->
+  <header>
+    <h1>ロゴファクトリー問題作成 <span style="font-size: 0.8rem; color: #94a3b8;">BACKYARD</span></h1>
+    <div class="auth-box">
+      <input type="email" id="sbEmail" placeholder="メールアドレス">
+      <input type="password" id="sbPassword" placeholder="パスワード">
+      <button class="btn-primary" onclick="connectSupabase()">Supabase接続</button>
+      <span id="authStatus" style="font-size:0.8rem; color:var(--text-sub);">未接続</span>
+    </div>
+  </header>
+
+  <!-- 問題作成・編集カード -->
+  <div class="card">
+    <h2 id="formTitle">新しい問題を作成</h2>
+    
+    <div class="form-group">
+      <label>1. ロゴ画像の選択</label>
+      <input type="file" id="imageInput" accept="image/*" onchange="loadImage(event)">
+    </div>
+
+    <div class="form-group">
+      <label>2. 答え（別解は「/」で区切る）</label>
+      <input type="text" id="answerInput" style="width: 100%; box-sizing: border-box;" placeholder="例: フジテレビ/FUJI TV">
+    </div>
+
+    <div class="form-group">
+      <label>3. 表示エリアの切り取り選択</label>
+      <div class="mode-selector">
+        <button class="btn-outline" id="btnModeRect" onclick="setSelectMode('rect')">長方形選択</button>
+        <button class="btn-outline" id="btnModePoly" onclick="setSelectMode('poly')">多角形(ベクター)選択</button>
+        <button class="btn-accent" onclick="confirmCrop()">選択範囲を追加</button>
+        <button class="btn-outline" onclick="resetSelection()">選択解除</button>
+      </div>
+      <small id="modeGuide" style="color: #475569;">ドラッグして長方形を選択してください。</small>
+
+      <div class="editor-wrapper" id="editorWrapper">
+        <img id="sourceImage" src="" alt="" style="display:none;" onload="initCanvas()">
+        <canvas id="selectionCanvas"></canvas>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>登録される切り取りパターン（複数作成可能）</label>
+      <div id="cropsPreview" class="crops-preview">
+        <!-- 追加された切り取り画像がここに表示されます -->
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btnSaveQuiz" style="width: 100%; padding: 12px; font-size: 1rem;" onclick="saveQuiz()">問題を登録／保存</button>
+  </div>
+
+  <!-- 問題一覧カード -->
+  <div class="card">
+    <div class="list-header">
+      <div>
+        <strong>問題数: <span id="quizCount">0</span>問</strong>
+      </div>
+      <div>
+        <input type="text" id="searchInput" placeholder="回答で検索..." oninput="renderQuizList()">
+      </div>
+    </div>
+
+    <div id="quizList" class="quiz-list">
+      <!-- 問題一覧がここに表示されます -->
+    </div>
+
+    <div class="json-actions">
+      <button class="btn-outline" onclick="exportJSON()">JSON書き出し</button>
+      <button class="btn-outline" onclick="document.getElementById('jsonFileInput').click()">JSON読み込み (マージ)</button>
+      <input type="file" id="jsonFileInput" accept=".json" style="display:none;" onchange="importJSON(event)">
+    </div>
+  </div>
+</div>
+
+<script>
+  let supabaseClient = null;
+  let quizzes = []; // 全問題データ
+  let currentEditingId = null;
+  let isAdmin = false; // 管理者権限フラグ
+
+  // キャンバス・選択関係の変数
+  let sourceImg = document.getElementById('sourceImage');
+  let canvas = document.getElementById('selectionCanvas');
+  let ctx = canvas.getContext('2d');
+  
+  let selectMode = 'rect'; // 'rect' or 'poly'
+  let isSelecting = false;
+  let startX = 0, startY = 0, currentX = 0, currentY = 0; // rect用
+  let polyPoints = []; // poly用 [{x, y}, ...]
+  let currentCrops = []; // 現在編集中の切り取りパターン [{ type: 'rect'|'poly', points: [...] }]
+
+  // --- Supabase 接続情報の設定箇所 ---
+  const SUPABASE_URL = "https://vnnuqbndesdemwacneqf.supabase.co"; 
+  const SUPABASE_ANON_KEY = "sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc";
+
+  async function connectSupabase() {
+    const email = document.getElementById('sbEmail').value;
+    const password = document.getElementById('sbPassword').value;
+
+    if(!email || !password) {
+      alert("メールアドレスとパスワードを入力してください。");
+      return;
+    }
+
+    try {
+      supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      
+      if(error) throw error;
+      
+      // admin_users テーブルを参照して管理者権限チェック
+      await checkAdminStatus(data.user);
+
+      const statusText = document.getElementById('authStatus');
+      statusText.innerText = "接続完了 (" + data.user.email + ")";
+      statusText.style.color = "#4ade80";
+      if(isAdmin) {
+        statusText.innerHTML += '<span class="badge-admin">管理者</span>';
+      }
+
+      // 初回データ読み込み
+      fetchFromSupabase();
+    } catch(err) {
+      alert("接続エラー: " + err.message);
+      document.getElementById('authStatus').innerText = "接続失敗";
+      document.getElementById('authStatus').style.color = "#f87171";
+    }
+  }
+
+  // admin_users テーブルから user_id または email を照合する関数
+  async function checkAdminStatus(user) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('admin_users')
+        .select('*');
+
+      if(!error && data && data.length > 0) {
+        // user_idのUUID一致、またはemailカラムが存在する場合の一致をチェック
+        isAdmin = data.some(row => row.user_id === user.id || row.email === user.email || row.user_id === user.email);
+      } else {
+        isAdmin = false;
+      }
+    } catch(e) {
+      isAdmin = false;
+    }
+  }
+
+  // Supabaseからのデータ取得とマージ
+  async function fetchFromSupabase() {
+    if(!supabaseClient) return;
+    
+    const { data, error } = await supabaseClient
+      .from('quiz_data')
+      .select('logo_factory')
+      .eq('id', 'main_quiz_data');
+
+    if(!error && data) {
+      data.forEach(row => {
+        if(row.logo_factory) {
+          row.logo_factory.forEach(remoteItem => {
+            const index = quizzes.findIndex(q => q.id === remoteItem.id);
+            if(index === -1) {
+              quizzes.push(remoteItem);
+            } else {
+              quizzes[index] = remoteItem;
+            }
+          });
+        }
+      });
+      renderQuizList();
+    }
+  }
+
+  // Supabaseへの自動保存
+  async function syncToSupabase() {
+    if(!supabaseClient) return;
+
+    const { data } = await supabaseClient
+      .from('quiz_data')
+      .select('logo_factory')
+      .eq('id', 'main_quiz_data');
+
+    let remoteData = (data && data[0] && data[0].logo_factory) ? data[0].logo_factory : [];
+    
+    quizzes.forEach(localItem => {
+      const idx = remoteData.findIndex(r => r.id === localItem.id);
+      if(idx === -1) {
+        remoteData.push(localItem);
+      } else {
+        remoteData[idx] = localItem;
+      }
+    });
+
+    await supabaseClient.from('quiz_data').upsert({ id: 'main_quiz_data', logo_factory: remoteData });
+  }
+
+  // --- 画像読み込みとキャンバス設定 ---
+  function loadImage(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      sourceImg.src = event.target.result;
+      sourceImg.style.display = 'block';
+    }
+    reader.readAsDataURL(file);
+  }
+
+  function initCanvas() {
+    canvas.width = sourceImg.clientWidth;
+    canvas.height = sourceImg.clientHeight;
+    resetSelection();
+  }
+
+  // --- 描画・切り取り制御 ---
+  function setSelectMode(mode) {
+    selectMode = mode;
+    resetSelection();
+    document.getElementById('btnModeRect').style.borderColor = mode === 'rect' ? 'var(--primary)' : 'var(--border-color)';
+    document.getElementById('btnModePoly').style.borderColor = mode === 'poly' ? 'var(--primary)' : 'var(--border-color)';
+    document.getElementById('modeGuide').innerText = mode === 'rect' ? 
+      'ドラッグして長方形を選択してください。' : 'クリックで点をつなぎ、最後の点付近クリックで囲みを閉じます。';
+  }
+
+  function resetSelection() {
+    polyPoints = [];
+    isSelecting = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if(selectMode === 'rect') {
+      isSelecting = true;
+      startX = x; startY = y;
+      currentX = x; currentY = y;
+    } else if(selectMode === 'poly') {
+      polyPoints.push({x, y});
+      drawSelection();
+    }
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if(!isSelecting || selectMode !== 'rect') return;
+    const rect = canvas.getBoundingClientRect();
+    currentX = e.clientX - rect.left;
+    currentY = e.clientY - rect.top;
+    drawSelection();
+  });
+
+  canvas.addEventListener('mouseup', () => {
+    if(selectMode === 'rect') {
+      isSelecting = false;
+    }
+  });
+
+  function drawSelection() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = 'rgba(37, 99, 235, 0.2)';
+
+    if(selectMode === 'rect') {
+      const w = currentX - startX;
+      const h = currentY - startY;
+      ctx.fillRect(startX, startY, w, h);
+      ctx.strokeRect(startX, startY, w, h);
+    } else if(selectMode === 'poly' && polyPoints.length > 0) {
+      ctx.beginPath();
+      ctx.moveTo(polyPoints[0].x, polyPoints[0].y);
+      for(let i = 1; i < polyPoints.length; i++) {
+        ctx.lineTo(polyPoints[i].x, polyPoints[i].y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  function confirmCrop() {
+    if(!sourceImg.src) return;
+
+    const scaleX = sourceImg.naturalWidth / canvas.width;
+    const scaleY = sourceImg.naturalHeight / canvas.height;
+
+    let cropData = null;
+
+    if(selectMode === 'rect') {
+      const w = Math.abs(currentX - startX);
+      const h = Math.abs(currentY - startY);
+      if(w < 5 || h < 5) return;
+
+      cropData = {
+        type: 'rect',
+        x: Math.min(startX, currentX) * scaleX,
+        y: Math.min(startY, currentY) * scaleY,
+        width: w * scaleX,
+        height: h * scaleY
+      };
+    } else if(selectMode === 'poly') {
+      if(polyPoints.length < 3) return;
+      cropData = {
+        type: 'poly',
+        points: polyPoints.map(p => ({ x: p.x * scaleX, y: p.y * scaleY }))
+      };
+    }
+
+    if(cropData) {
+      const croppedDataUrl = generateCropPreview(cropData);
+      currentCrops.push({ data: cropData, preview: croppedDataUrl });
+      renderCropsPreview();
+      resetSelection();
+    }
+  }
+
+  function generateCropPreview(crop) {
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+
+    if(crop.type === 'rect') {
+      tempCanvas.width = crop.width;
+      tempCanvas.height = crop.height;
+      tempCtx.drawImage(sourceImg, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    } else if(crop.type === 'poly') {
+      const xs = crop.points.map(p => p.x);
+      const ys = crop.points.map(p => p.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+      tempCanvas.width = maxX - minX;
+      tempCanvas.height = maxY - minY;
+
+      tempCtx.beginPath();
+      tempCtx.moveTo(crop.points[0].x - minX, crop.points[0].y - minY);
+      for(let i = 1; i < crop.points.length; i++) {
+        tempCtx.lineTo(crop.points[i].x - minX, crop.points[i].y - minY);
+      }
+      tempCtx.closePath();
+      tempCtx.clip();
+
+      tempCtx.drawImage(sourceImg, minX, minY, tempCanvas.width, tempCanvas.height, 0, 0, tempCanvas.width, tempCanvas.height);
+    }
+    return tempCanvas.toDataURL();
+  }
+
+  function renderCropsPreview() {
+    const container = document.getElementById('cropsPreview');
+    container.innerHTML = '';
+    currentCrops.forEach((crop, index) => {
+      const div = document.createElement('div');
+      div.className = 'crop-item';
+      div.innerHTML = `
+        <img src="${crop.preview}">
+        <div class="btn-remove" onclick="removeCrop(${index})">×</div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  function removeCrop(index) {
+    currentCrops.splice(index, 1);
+    renderCropsPreview();
+  }
+
+  // --- 問題の登録と編集 ---
+  function saveQuiz() {
+    const answers = document.getElementById('answerInput').value.trim();
+    if(!sourceImg.src || !answers || currentCrops.length === 0) {
+      alert("画像、答え、切り取りエリア（少なくとも1つ）を設定してください。");
+      return;
+    }
+
+    const quizData = {
+      id: currentEditingId || 'quiz_' + Date.now(),
+      image: sourceImg.src,
+      answers: answers.split('/').map(a => a.trim()),
+      crops: currentCrops,
+      updatedAt: new Date().toISOString()
+    };
+
+    if(currentEditingId) {
+      const idx = quizzes.findIndex(q => q.id === currentEditingId);
+      if(idx !== -1) quizzes[idx] = quizData;
+      currentEditingId = null;
+      document.getElementById('formTitle').innerText = "新しい問題を作成";
+    } else {
+      quizzes.unshift(quizData);
+    }
+
+    // リセット
+    document.getElementById('answerInput').value = '';
+    document.getElementById('imageInput').value = '';
+    sourceImg.src = '';
+    sourceImg.style.display = 'none';
+    currentCrops = [];
+    renderCropsPreview();
+    resetSelection();
+
+    renderQuizList();
+    syncToSupabase();
+  }
+
+  function editQuiz(id) {
+    const quiz = quizzes.find(q => q.id === id);
+    if(!quiz) return;
+
+    currentEditingId = quiz.id;
+    document.getElementById('formTitle').innerText = "問題を編集中 (ID: " + id + ")";
+    document.getElementById('answerInput').value = quiz.answers.join('/');
+    sourceImg.src = quiz.image;
+    sourceImg.style.display = 'block';
+    currentCrops = [...quiz.crops];
+    
+    renderCropsPreview();
+    setTimeout(initCanvas, 200);
+  }
+
+  function deleteQuiz(id) {
+    if(supabaseClient && !isAdmin) {
+      alert("問題の削除権限があるのは管理者のみです。");
+      return;
+    }
+
+    if(!confirm("本当に削除しますか？")) return;
+    quizzes = quizzes.filter(q => q.id !== id);
+    renderQuizList();
+    syncToSupabase();
+  }
+
+  // --- 一覧表示・検索 ---
+  function renderQuizList() {
+    const searchText = document.getElementById('searchInput').value.toLowerCase();
+    const listContainer = document.getElementById('quizList');
+    listContainer.innerHTML = '';
+
+    const filtered = quizzes.filter(q => 
+      q.answers.some(ans => ans.toLowerCase().includes(searchText))
+    );
+
+    document.getElementById('quizCount').innerText = filtered.length;
+
+    filtered.forEach(quiz => {
+      const item = document.createElement('div');
+      item.className = 'quiz-item';
+      
+      const cropsMini = quiz.crops.map(c => `<img src="${c.preview}">`).join('');
+
+      item.innerHTML = `
+        <div class="quiz-info">
+          <div class="quiz-answers">${quiz.answers.join(' / ')}</div>
+          <div class="quiz-crops-mini">${cropsMini}</div>
+        </div>
+        <div>
+          <button class="btn-outline" onclick="editQuiz('${quiz.id}')">編集</button>
+          <button class="btn-danger" onclick="deleteQuiz('${quiz.id}')">削除</button>
+        </div>
+      `;
+      listContainer.appendChild(item);
+    });
+  }
+
+  // --- JSON 入出力 ---
+  function exportJSON() {
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = `logo_factory.${today}.json`;
+    
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(quizzes, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", filename);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  }
+
+  function importJSON(e) {
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        if(Array.isArray(importedData)) {
+          importedData.forEach(item => {
+            const index = quizzes.findIndex(q => q.id === item.id);
+            if(index !== -1) {
+              quizzes[index] = item;
+            } else {
+              quizzes.push(item);
+            }
+          });
+          renderQuizList();
+          syncToSupabase();
+          alert("JSONデータを正常にマージしました。");
+        }
+      } catch(err) {
+        alert("JSONファイルの読み込みに失敗しました。");
+      }
+    };
+    reader.readAsText(file);
+  }
+</script>
+</body>
+</html>
