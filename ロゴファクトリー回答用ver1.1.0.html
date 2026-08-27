@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ロゴファクトリー - プレイ画面</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg-start-fallback: #728da2;
+      --bg-play-fallback: #3a4b58;
+      --text-yellow: #facc15;
+      --slot-bg: #4d4337;
+      --box-border: #676c60;
+      --input-border: #e79b4d;
+      --input-bg: #51b3be;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      overflow: hidden;
+      background-color: var(--bg-start-fallback);
+      background-image: url('logo_factory_start.png');
+      background-size: cover;
+      background-position: center;
+      color: #fff;
+    }
+
+    /* 共通画面スタイル */
+    .screen {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    .hidden { display: none !important; }
+
+    /* --- スタート画面 --- */
+    .title-logo {
+      font-size: clamp(3rem, 8vw, 6rem);
+      font-weight: 900;
+      color: var(--text-yellow);
+      text-shadow: 4px 4px 10px rgba(0,0,0,0.7), 0 0 20px rgba(250,204,21,0.5);
+      margin-bottom: 30px;
+      letter-spacing: 4px;
+      text-align: center;
+      width: 90%;
+    }
+
+    .start-form {
+      background: rgba(0, 0, 0, 0.6);
+      padding: 25px 40px;
+      border-radius: 12px;
+      backdrop-filter: blur(5px);
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+
+    .start-form label {
+      font-size: 1.2rem;
+      margin-right: 10px;
+      font-weight: bold;
+    }
+
+    .start-form input[type="number"] {
+      padding: 8px 12px;
+      font-size: 1.2rem;
+      width: 80px;
+      text-align: center;
+      border-radius: 6px;
+      border: none;
+      outline: none;
+    }
+
+    .btn-start {
+      margin-top: 25px;
+      padding: 12px 40px;
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #1e293b;
+      background: var(--text-yellow);
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 6px 0 #b45309;
+      transition: all 0.1s;
+    }
+
+    .btn-start:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 #b45309;
+    }
+
+    .notice-msg {
+      margin-top: 15px;
+      color: #f87171;
+      font-weight: bold;
+      font-size: 0.95rem;
+    }
+
+    /* --- プレイ画面 --- */
+    #playScreen {
+      background-image: url('logo_factory_play.png');
+      background-size: cover;
+      background-position: center;
+      background-color: var(--bg-play-fallback);
+      justify-content: flex-start;
+    }
+
+    /* 貼り付け枠コンテナ */
+    .slots-column {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 20;
+    }
+
+    .slots-left { left: 20px; }
+    .slots-right { right: 20px; }
+
+    .slot-box {
+      width: 100px;
+      height: 75px; /* アスペクト比 4:3 */
+      background-color: var(--slot-bg);
+      border: 2px dashed #78716c;
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+      animation: popIn 0.4s ease-out forwards;
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .slot-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* レール・クレーン・コンベア領域 */
+    .factory-area {
+      position: relative;
+      width: 100%;
+      height: 70%;
+      overflow: hidden;
+    }
+
+    .rail {
+      position: absolute;
+      top: 10%;
+      left: 140px;
+      right: 140px;
+      height: 8px;
+      background: #475569;
+      border-bottom: 2px solid #94a3b8;
+    }
+
+    /* 移動する問題ターゲット */
+    .crane-target {
+      position: absolute;
+      top: 10%;
+      width: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+      z-index: 30;
+      will-change: left, top;
+    }
+
+    .crane-arm {
+      width: 4px;
+      height: 40px;
+      background: #94a3b8;
+      position: relative;
+    }
+    .crane-arm::after {
+      content: '';
+      position: absolute;
+      bottom: -10px;
+      left: -8px;
+      width: 20px;
+      height: 10px;
+      border: 3px solid #64748b;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .problem-box {
+      width: 200px;
+      height: 150px; /* アスペクト比 4:3 */
+      border: 4px solid var(--box-border);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+      background-color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .problem-box canvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    /* 完全ロゴオーバーレイ（正解時） */
+    .complete-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      z-index: 40;
+      opacity: 0;
+    }
+
+    .piece {
+      width: 100%;
+      height: 100%;
+      background-size: 200% 200%;
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    /* 各領域の正しいパーツを表示させる設定 */
+    .p-tl { 
+      background-position: 0% 0%; 
+      border-right: 2px solid rgba(0,0,0,0.1); 
+      border-bottom: 2px solid rgba(0,0,0,0.1); 
+      transform: translate(-50px, -50px); 
+    }
+    .p-tr { 
+      background-position: 100% 0%; 
+      border-left: 2px solid rgba(0,0,0,0.1); 
+      border-bottom: 2px solid rgba(0,0,0,0.1); 
+      transform: translate(50px, -50px); 
+    }
+    .p-bl { 
+      background-position: 0% 100%; 
+      border-right: 2px solid rgba(0,0,0,0.1); 
+      border-top: 2px solid rgba(0,0,0,0.1); 
+      transform: translate(-50px, 50px); 
+    }
+    .p-br { 
+      background-position: 100% 100%; 
+      border-left: 2px solid rgba(0,0,0,0.1); 
+      border-top: 2px solid rgba(0,0,0,0.1); 
+      transform: translate(50px, 50px); 
+    }
+
+    .complete-overlay.assembled .piece {
+      transform: translate(0, 0) !important;
+    }
+
+    /* 回答入力エリア */
+    .input-area {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .answer-input {
+      width: 380px;
+      padding: 12px 20px;
+      font-size: 1.5rem;
+      text-align: center;
+      color: #ffffff;
+      background-color: var(--input-bg);
+      border: 4px solid var(--input-border);
+      border-radius: 12px;
+      outline: none;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+      font-weight: bold;
+    }
+
+    /* 爆発エフェクト */
+    .explosion-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle, #ff4500, #000 80%);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      animation: flash 0.2s infinite alternate;
+    }
+
+    @keyframes flash {
+      from { opacity: 0.9; }
+      to { opacity: 1; }
+    }
+
+    /* リザルト・ランキング画面 */
+    .result-card {
+      background: rgba(15, 23, 42, 0.9);
+      border: 2px solid #334155;
+      border-radius: 16px;
+      padding: 25px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .result-title {
+      font-size: 2rem;
+      text-align: center;
+      color: var(--text-yellow);
+      margin-bottom: 15px;
+    }
+
+    .my-score {
+      background: #1e293b;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 1.2rem;
+    }
+
+    .rank-section {
+      margin-bottom: 20px;
+    }
+
+    .rank-section h3 {
+      font-size: 1.1rem;
+      color: #60a5fa;
+      border-bottom: 1px solid #475569;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+    }
+
+    .rank-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .rank-table th, .rank-table td {
+      padding: 6px 10px;
+      text-align: left;
+    }
+
+    .rank-table tr:nth-child(even) {
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* 自分の順位ハイライト用スタイル */
+    .rank-table tr.my-row {
+      background-color: rgba(239, 68, 68, 0.25) !important;
+      color: #fca5a5;
+      font-weight: bold;
+    }
+
+    /* 折りたたみ用アコーディオン表示 */
+    details.rank-details {
+      margin-top: 6px;
+    }
+
+    details.rank-details summary {
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 0.85rem;
+      padding: 4px 0;
+      outline: none;
+    }
+
+    details.rank-details summary:hover {
+      color: #cbd5e1;
+    }
+
+    .btn-close {
+      width: 100%;
+      padding: 12px;
+      background: #ef4444;
+      color: white;
+      font-size: 1.2rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. スタート画面 -->
+  <div id="startScreen" class="screen">
+    <div class="title-logo">ロゴファクトリー</div>
+    <div class="start-form">
+      <div>
+        <label for="quizCountInput">挑戦する問題数:</label>
+        <input type="number" id="quizCountInput" value="10" min="1" max="99">
+      </div>
+      <div id="noticeMsg" class="notice-msg"></div>
+      <button class="btn-start" onclick="startGame()">ゲームスタート</button>
+    </div>
+  </div>
+
+  <!-- 2. プレイ画面 -->
+  <div id="playScreen" class="screen hidden">
+    <!-- 貼り付け枠 (左右) -->
+    <div id="slotsLeft" class="slots-column slots-left"></div>
+    <div id="slotsRight" class="slots-column slots-right"></div>
+
+    <!-- コンベア・クレーン稼働エリア -->
+    <div class="factory-area" id="factoryArea">
+      <div class="rail"></div>
+
+      <!-- 動くターゲット (クレーン＋問題) -->
+      <div id="craneTarget" class="crane-target" style="display:none;">
+        <div class="crane-arm"></div>
+        <div class="problem-box" id="problemBox">
+          <canvas id="cropCanvas"></canvas>
+          <!-- 完全体オーバーレイ (正解アニメ用) -->
+          <div id="completeOverlay" class="complete-overlay">
+            <div class="piece p-tl" id="pTl"></div>
+            <div class="piece p-tr" id="pTr"></div>
+            <div class="piece p-bl" id="pBl"></div>
+            <div class="piece p-br" id="pBr"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 回答入力 -->
+    <div class="input-area">
+      <input type="text" id="answerInput" class="answer-input" placeholder="こたえを入力" autocomplete="off">
+    </div>
+  </div>
+
+  <!-- 3. ゲームオーバー (爆発演出) -->
+  <div id="explosionOverlay" class="explosion-overlay hidden">
+    <h1 style="font-size: 4rem; color: #facc15; text-shadow: 0 0 10px #000;">GAME OVER</h1>
+    <p style="font-size: 1.5rem; margin-top: 10px;">工場が爆発してしまいました…</p>
+  </div>
+
+  <!-- 4. リザルト／ランキング画面 -->
+  <div id="resultScreen" class="screen hidden">
+    <div class="result-card">
+      <div class="result-title" id="resultHeader">GAME CLEAR!</div>
+      
+      <div class="my-score">
+        <div>獲得ポイント: <strong id="resPoints" style="color:var(--text-yellow); font-size:1.5rem;">0</strong> pt</div>
+        <div>クリアタイム: <strong id="resTime" style="color:#60a5fa; font-size:1.5rem;">0.00</strong> 秒</div>
+      </div>
+
+      <div class="rank-section">
+        <h3>本日のランキング (あなたの順位: <span id="dailyMyRank">-</span>)</h3>
+        <table class="rank-table">
+          <thead><tr><th>順位</th><th>ポイント</th><th>タイム</th></tr></thead>
+          <tbody id="dailyRankBodyTop"></tbody>
+        </table>
+        <details class="rank-details" id="dailyRankDetails">
+          <summary>4位以下を表示</summary>
+          <table class="rank-table">
+            <tbody id="dailyRankBodyRest"></tbody>
+          </table>
+        </details>
+      </div>
+
+      <div class="rank-section">
+        <h3>総合ランキング (あなたの順位: <span id="totalMyRank">-</span>)</h3>
+        <table class="rank-table">
+          <thead><tr><th>順位</th><th>ポイント</th><th>タイム</th></tr></thead>
+          <tbody id="totalRankBodyTop"></tbody>
+        </table>
+        <details class="rank-details" id="totalRankDetails">
+          <summary>4位以下を表示</summary>
+          <table class="rank-table">
+            <tbody id="totalRankBodyRest"></tbody>
+          </table>
+        </details>
+      </div>
+
+      <button class="btn-close" onclick="closeTab()">終了</button>
+    </div>
+  </div>
+
+<script>
+  // --- Supabase設定 ---
+  const SUPABASE_URL = "https://vnnuqbndesdemwacneqf.supabase.co"; 
+  const SUPABASE_ANON_KEY = "sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc";
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // --- ゲーム状態変数 ---
+  let rawQuizzes = [];
+  let playQueue = [];
+  let targetQuizCount = 10;
+  let currentQuizIndex = 0;
+  let currentQuiz = null;
+  let currentCrop = null;
+  let clearedCount = 0;
+  let startTime = 0;
+  let gameTimer = null;
+  let isAnsweringBlocked = false;
+
+  // 移動アニメーション用
+  let moveStartTime = null;
+  let startX = 0, endX = 0;
+  let moveAnimationFrame = null;
+  let lastCountdownSec = -1;
+
+  // Web Audio API 音源生成
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'piro') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    } else if (type === 'boo') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+    } else if (type === 'tick') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    } else if (type === 'boom') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.8);
+      gain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.8);
+    }
+  }
+
+  // --- 初期化 & データ取得 ---
+  window.addEventListener('DOMContentLoaded', async () => {
+    await loadQuizData();
+  });
+
+  async function loadQuizData() {
+    try {
+      const { data, error } = await supabaseClient
+        .from('quiz_data')
+        .select('logo_factory')
+        .eq('id', 'main_quiz_data');
+
+      if (!error && data && data.length > 0 && data[0].logo_factory) {
+        rawQuizzes = data[0].logo_factory;
+      }
+    } catch (e) {
+      console.error("データ取得失敗", e);
+    }
+  }
+
+  // --- ゲーム開始 ---
+  function startGame() {
+    let inputVal = parseInt(document.getElementById('quizCountInput').value) || 10;
+    const availableCount = rawQuizzes.length;
+
+    if (availableCount === 0) {
+      alert("問題データがありません。");
+      return;
+    }
+
+    if (inputVal > availableCount) {
+      document.getElementById('noticeMsg').innerText = `登録問題数より多いので全問(${availableCount}問)とします。`;
+      targetQuizCount = availableCount;
+    } else {
+      targetQuizCount = inputVal;
+      document.getElementById('noticeMsg').innerText = "";
+    }
+
+    playQueue = [...rawQuizzes].sort(() => Math.random() - 0.5).slice(0, targetQuizCount);
+
+    currentQuizIndex = 0;
+    clearedCount = 0;
+
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('playScreen').classList.remove('hidden');
+
+    setupSlots();
+    startTime = Date.now();
+    
+    const ansInput = document.getElementById('answerInput');
+    ansInput.value = '';
+    ansInput.focus();
+    ansInput.onkeydown = (e) => {
+      if (e.key === 'Enter') checkAnswer();
+    };
+
+    nextQuestion();
+  }
+
+  function setupSlots() {
+    const leftCol = document.getElementById('slotsLeft');
+    const rightCol = document.getElementById('slotsRight');
+    leftCol.innerHTML = '';
+    rightCol.innerHTML = '';
+
+    const remainingTotal = targetQuizCount - clearedCount;
+    const currentBatchCount = Math.min(10, remainingTotal);
+
+    for (let i = 0; i < currentBatchCount; i++) {
+      const slot = document.createElement('div');
+      slot.className = 'slot-box';
+      slot.id = `slot-${i}`;
+      
+      if (i < 5) {
+        leftCol.appendChild(slot);
+      } else {
+        rightCol.appendChild(slot);
+      }
+    }
+  }
+
+  // --- 次の問題の開始 ---
+  function nextQuestion() {
+    if (currentQuizIndex >= playQueue.length) {
+      gameClear();
+      return;
+    }
+
+    const batchIndex = clearedCount % 10;
+    if (clearedCount > 0 && batchIndex === 0) {
+      setupSlots();
+    }
+
+    isAnsweringBlocked = false;
+    currentQuiz = playQueue[currentQuizIndex];
+    currentCrop = currentQuiz.crops[Math.floor(Math.random() * currentQuiz.crops.length)];
+
+    const craneTarget = document.getElementById('craneTarget');
+    const factoryArea = document.getElementById('factoryArea');
+    const overlay = document.getElementById('completeOverlay');
+    overlay.classList.remove('assembled');
+    overlay.style.opacity = '0';
+
+    // 右端位置を定義
+    const initialX = factoryArea.clientWidth - 350;
+
+    // 初期化：右端の上部に配置（隠しておく）
+    craneTarget.style.transition = 'none';
+    craneTarget.style.left = `${initialX}px`;
+    craneTarget.style.top = '-200px';
+    craneTarget.style.display = 'flex';
+
+    renderCropImage(currentQuiz.image, currentCrop.data, () => {
+      // 右端の位置のまま下降
+      craneTarget.style.transition = 'top 0.5s ease-out';
+      setTimeout(() => {
+        craneTarget.style.top = '10%';
+        setTimeout(startMovingTarget, 500);
+      }, 50);
+    });
+  }
+
+  function renderCropImage(imgSrc, cropData, callback) {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = imgSrc;
+    img.onload = () => {
+      const canvas = document.getElementById('cropCanvas');
+      const ctx = canvas.getContext('2d');
+      
+      const boxW = 200, boxH = 150;
+      canvas.width = boxW;
+      canvas.height = boxH;
+
+      let cropW = cropData.width || boxW;
+      let cropH = cropData.height || boxH;
+      let minX = cropData.x || 0, minY = cropData.y || 0;
+
+      if (cropData.type === 'poly') {
+        const xs = cropData.points.map(p => p.x);
+        const ys = cropData.points.map(p => p.y);
+        minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        cropW = maxX - minX;
+        cropH = maxY - minY;
+      }
+
+      const tempC = document.createElement('canvas');
+      tempC.width = cropW; tempC.height = cropH;
+      const tempCtx = tempC.getContext('2d');
+
+      if (cropData.type === 'poly') {
+        tempCtx.beginPath();
+        tempCtx.moveTo(cropData.points[0].x - minX, cropData.points[0].y - minY);
+        for(let i=1; i<cropData.points.length; i++){
+          tempCtx.lineTo(cropData.points[i].x - minX, cropData.points[i].y - minY);
+        }
+        tempCtx.closePath();
+        tempCtx.clip();
+      }
+      tempCtx.drawImage(img, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+
+      const dominantColor = getEdgeDominantColor(tempCtx, cropW, cropH);
+      document.getElementById('problemBox').style.backgroundColor = dominantColor;
+
+      ctx.clearRect(0, 0, boxW, boxH);
+      const scale = Math.min(boxW / cropW, boxH / cropH);
+      const drawW = cropW * scale;
+      const drawH = cropH * scale;
+      const offX = (boxW - drawW) / 2;
+      const offY = (boxH - drawH) / 2;
+
+      ctx.drawImage(tempC, 0, 0, cropW, cropH, offX, offY, drawW, drawH);
+
+      // 正解時合体用パーツに画像を割り当て
+      ['pTl','pTr','pBl','pBr'].forEach(id => {
+        const el = document.getElementById(id);
+        el.style.backgroundImage = `url(${imgSrc})`;
+      });
+
+      callback();
+    };
+  }
+
+  function getEdgeDominantColor(ctx, w, h) {
+    try {
+      const imgData = ctx.getImageData(0, 0, Math.floor(w), Math.floor(h)).data;
+      const colorCounts = {};
+      
+      for (let x = 0; x < w; x += 2) {
+        checkPixel(x, 0); checkPixel(x, h - 1);
+      }
+      for (let y = 0; y < h; y += 2) {
+        checkPixel(0, y); checkPixel(w - 1, y);
+      }
+
+      function checkPixel(px, py) {
+        const idx = (Math.floor(py) * Math.floor(w) + Math.floor(px)) * 4;
+        const a = imgData[idx + 3];
+        if (a > 50) {
+          const key = `${imgData[idx]},${imgData[idx+1]},${imgData[idx+2]}`;
+          colorCounts[key] = (colorCounts[key] || 0) + 1;
+        }
+      }
+
+      let maxCount = 0, dominant = "#000000";
+      for (const k in colorCounts) {
+        if (colorCounts[k] > maxCount) {
+          maxCount = colorCounts[k];
+          dominant = `rgb(${k})`;
+        }
+      }
+      return dominant;
+    } catch(e) {
+      return "#333333";
+    }
+  }
+
+  // --- 左移動アニメーション ---
+  function startMovingTarget() {
+    const craneTarget = document.getElementById('craneTarget');
+    const factoryArea = document.getElementById('factoryArea');
+    
+    startX = factoryArea.clientWidth - 350;
+    endX = 130;
+
+    craneTarget.style.transition = 'none';
+    craneTarget.style.left = `${startX}px`;
+
+    moveStartTime = performance.now();
+    lastCountdownSec = -1;
+
+    function animate(now) {
+      if (isAnsweringBlocked) return;
+
+      const elapsed = (now - moveStartTime) / 1000;
+      const duration = 10.0;
+
+      if (elapsed >= duration) {
+        craneTarget.style.left = `${endX}px`;
+        gameOver();
+        return;
+      }
+
+      const remaining = duration - elapsed;
+      if (remaining <= 5.0) {
+        const currentSec = Math.ceil(remaining);
+        if (currentSec !== lastCountdownSec && currentSec > 0) {
+          playSound('tick');
+          lastCountdownSec = currentSec;
+        }
+      }
+
+      const progress = elapsed / duration;
+      const currentPos = startX - (startX - endX) * progress;
+      craneTarget.style.left = `${currentPos}px`;
+
+      moveAnimationFrame = requestAnimationFrame(animate);
+    }
+
+    moveAnimationFrame = requestAnimationFrame(animate);
+  }
+
+  // --- 回答チェック ---
+  function checkAnswer() {
+    if (isAnsweringBlocked || !currentQuiz) return;
+
+    const inputEl = document.getElementById('answerInput');
+    const userAns = inputEl.value.trim().toLowerCase();
+    if (!userAns) return;
+
+    const isCorrect = currentQuiz.answers.some(ans => ans.toLowerCase() === userAns);
+
+    if (isCorrect) {
+      playSound('piro');
+      isAnsweringBlocked = true;
+      cancelAnimationFrame(moveAnimationFrame);
+      inputEl.value = '';
+      executeCorrectAnimation();
+    } else {
+      playSound('boo');
+      inputEl.value = '';
+      inputEl.style.borderColor = '#ef4444';
+      setTimeout(() => inputEl.style.borderColor = 'var(--input-border)', 400);
+    }
+  }
+
+  function executeCorrectAnimation() {
+    const overlay = document.getElementById('completeOverlay');
+    overlay.style.opacity = '1';
+    
+    setTimeout(() => {
+      overlay.classList.add('assembled');
+    }, 50);
+
+    setTimeout(() => {
+      const slotIndex = clearedCount % 10;
+      const targetSlot = document.getElementById(`slot-${slotIndex}`);
+      const craneTarget = document.getElementById('craneTarget');
+
+      if (!targetSlot) return;
+
+      const slotRect = targetSlot.getBoundingClientRect();
+      const craneRect = craneTarget.getBoundingClientRect();
+
+      const diffX = slotRect.left - craneRect.left;
+      const diffY = slotRect.top - craneRect.top;
+
+      craneTarget.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s';
+      craneTarget.style.transform = `translate(${diffX}px, ${diffY}px) scale(0.48)`;
+
+      setTimeout(() => {
+        const img = document.createElement('img');
+        img.src = currentQuiz.image;
+        targetSlot.appendChild(img);
+
+        craneTarget.style.display = 'none';
+        craneTarget.style.transform = 'none';
+
+        clearedCount++;
+        currentQuizIndex++;
+        nextQuestion();
+      }, 400);
+
+    }, 300);
+  }
+
+  function gameOver() {
+    isAnsweringBlocked = true;
+    cancelAnimationFrame(moveAnimationFrame);
+    playSound('boom');
+
+    const exp = document.getElementById('explosionOverlay');
+    exp.classList.remove('hidden');
+
+    setTimeout(async () => {
+      exp.classList.add('hidden');
+      await finishGame(false);
+    }, 2000);
+  }
+
+  async function gameClear() {
+    isAnsweringBlocked = true;
+    cancelAnimationFrame(moveAnimationFrame);
+    await finishGame(true);
+  }
+
+  // --- ゲーム終了・DB記録・ランキング表示 ---
+  async function finishGame(isClear) {
+    const totalTime = parseFloat(((Date.now() - startTime) / 1000).toFixed(2));
+    const points = clearedCount * 10;
+
+    document.getElementById('playScreen').classList.add('hidden');
+    document.getElementById('resultScreen').classList.remove('hidden');
+
+    document.getElementById('resultHeader').innerText = isClear ? "GAME CLEAR!" : "GAME OVER";
+    document.getElementById('resPoints').innerText = points;
+    document.getElementById('resTime').innerText = totalTime.toFixed(2);
+
+    // Supabaseへの登録（完了をawaitで確実にする）
+    try {
+      const { error: insertError } = await supabaseClient
+        .from('daily_records')
+        .insert([{
+          logo_factory: points,
+          logo_factory_time: totalTime
+        }]);
+
+      if (insertError) {
+        console.error("書き込みエラー:", insertError);
+      }
+    } catch(e) {
+      console.error("記録保存例外:", e);
+    }
+
+    // 最新ランキング読み込み
+    await loadRankings(points, totalTime);
+  }
+
+  async function loadRankings(myPoint, myTime) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('daily_records')
+        .select('created_at, logo_factory, logo_factory_time')
+        .not('logo_factory', 'is', null);
+
+      if (error || !data) {
+        console.error("ランキング読み込みエラー:", error);
+        return;
+      }
+
+      // 日本標準時（JST）の日付を取得して照合
+      const now = new Date();
+      const jstDateStr = new Date(now.getTime() + (9 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+
+      const sortFn = (a, b) => {
+        if (b.logo_factory !== a.logo_factory) {
+          return b.logo_factory - a.logo_factory;
+        }
+        return a.logo_factory_time - b.logo_factory_time;
+      };
+
+      const totalList = [...data].sort(sortFn);
+      const dailyList = data.filter(r => {
+        if (!r.created_at) return false;
+        const recordDate = new Date(new Date(r.created_at).getTime() + (9 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+        return recordDate === jstDateStr;
+      }).sort(sortFn);
+
+      const myTotalRank = findMyRank(totalList, myPoint, myTime);
+      const myDailyRank = findMyRank(dailyList, myPoint, myTime);
+
+      document.getElementById('dailyMyRank').innerText = `${myDailyRank}/${dailyList.length}`;
+      document.getElementById('totalMyRank').innerText = `${myTotalRank}/${totalList.length}`;
+
+      renderRankTable('dailyRankBodyTop', 'dailyRankBodyRest', 'dailyRankDetails', dailyList, myDailyRank);
+      renderRankTable('totalRankBodyTop', 'totalRankBodyRest', 'totalRankDetails', totalList, myTotalRank);
+
+    } catch(e) {
+      console.error("ランキング表示失敗", e);
+    }
+  }
+
+  function findMyRank(list, point, time) {
+    const index = list.findIndex(r => r.logo_factory === point && Math.abs(r.logo_factory_time - time) < 0.05);
+    return index !== -1 ? index + 1 : list.length;
+  }
+
+  function renderRankTable(topElementId, restElementId, detailsElementId, list, myRank) {
+    const tbodyTop = document.getElementById(topElementId);
+    const tbodyRest = document.getElementById(restElementId);
+    const detailsEl = document.getElementById(detailsElementId);
+
+    tbodyTop.innerHTML = '';
+    tbodyRest.innerHTML = '';
+
+    const topList = list.slice(0, 3);
+    const restList = list.slice(3);
+
+    topList.forEach((row, idx) => {
+      const rankNum = idx + 1;
+      const tr = document.createElement('tr');
+      if (rankNum === myRank) {
+        tr.classList.add('my-row');
+      }
+      tr.innerHTML = `
+        <td>${rankNum}位</td>
+        <td>${row.logo_factory} pt</td>
+        <td>${parseFloat(row.logo_factory_time).toFixed(2)} 秒</td>
+      `;
+      tbodyTop.appendChild(tr);
+    });
+
+    if (restList.length > 0) {
+      detailsEl.style.display = 'block';
+      restList.forEach((row, idx) => {
+        const rankNum = idx + 4;
+        const tr = document.createElement('tr');
+        if (rankNum === myRank) {
+          tr.classList.add('my-row');
+        }
+        tr.innerHTML = `
+          <td>${rankNum}位</td>
+          <td>${row.logo_factory} pt</td>
+          <td>${parseFloat(row.logo_factory_time).toFixed(2)} 秒</td>
+        `;
+        tbodyRest.appendChild(tr);
+      });
+    } else {
+      detailsEl.style.display = 'none';
+    }
+  }
+
+  function closeTab() {
+    window.close();
+    alert("タブを閉じてゲームを終了してください。");
+  }
+</script>
+</body>
+</html>
