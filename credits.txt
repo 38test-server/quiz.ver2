@@ -1,0 +1,7 @@
+制作に使用した・補助的に利用したサイト
+github pages
+supabase
+vs code
+google gemini
+google document
+google スプレッドシート
