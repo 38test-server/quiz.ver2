@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ファイブボンバー - ゲームパネル</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #f1f5f9;          /* 背景：明るく品のある薄灰色 */
+            --card-bg: #ffffff;         /* カード背景：ホワイト */
+            --accent-red: #dc2626;      /* 番組の情熱的な赤 (Red 600) */
+            --accent-red-hover: #b91c1c;/* ホバー時の赤 */
+            --gold-primary: #d97706;    /* ゴールド（主色） */
+            --gold-light: #fef08a;      /* ライトゴールド */
+            --gold-border: #ca8a04;     /* 金色のフレーム線 */
+            --gold-glow: rgba(202, 138, 4, 0.2); /* 上品な金色の発光 */
+            --text-color: #0f172a;      /* 文字色：ダークスレート */
+            --text-muted: #64748b;      /* 補助文字：ミドルグレー */
+            --danger-color: #ef4444;    /* 爆発・エラー：赤 */
+            --success-color: #10b981;   /* 正解・安全：エメラルドグリーン */
+            --active-color: #dc2626;    /* アクティブ状態：赤 */
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 20%, #ffffff 0%, #f1f5f9 60%, #e2e8f0 100%);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            overflow-x: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* 爆発時の画面シェイクアニメーション */
+        @keyframes shake {
+            0% { transform: translate(2px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(0px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(2px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(2px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        .shake-effect {
+            animation: shake 0.15s infinite;
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 800px;
+            background-color: var(--card-bg);
+            border: 2px solid var(--gold-border); /* 上品なゴールド枠線 */
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 15px 35px rgba(15, 23, 42, 0.08), 0 0 15px var(--gold-glow);
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        /* 画面切り替え用 */
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.2rem;
+            margin-top: 0;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #b91c1c 0%, #dc2626 40%, #b45309 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            border-bottom: 2px solid var(--gold-border);
+            padding-bottom: 15px;
+            font-weight: 900;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--accent-red);
+            font-size: 1.1rem;
+        }
+
+        select, input[type="number"] {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            background-color: #f8fafc;
+            color: var(--text-color);
+            font-size: 1.1rem;
+            box-sizing: border-box;
+            transition: all 0.2s;
+        }
+
+        select:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: var(--gold-border);
+            box-shadow: 0 0 8px var(--gold-glow);
+        }
+
+        .btn {
+            cursor: pointer;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: #ffffff;
+            border: 1.5px solid #fde047; /* ゴールドの繊細な枠線 */
+            font-weight: bold;
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.25);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 38, 38, 0.35), 0 0 10px var(--gold-glow);
+        }
+
+        .btn-secondary {
+            background-color: #64748b;
+            color: white;
+            border: 1px solid #475569;
+        }
+
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+
+        /* プレイ画面：タイマー */
+        .timer-container {
+            width: 100%;
+            background-color: #e2e8f0;
+            border-radius: 999px;
+            height: 24px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            border: 2px solid #cbd5e1;
+        }
+
+        .timer-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, var(--success-color), #facc15, var(--danger-color));
+            background-size: 300% 100%;
+            transition: width 0.1s linear;
+        }
+
+        .timer-text-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .timer-digital {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--accent-red);
+            text-shadow: 0 0 10px rgba(220, 38, 38, 0.2);
+        }
+
+        .difficulty-badge {
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: #ffffff;
+        }
+
+        /* フリーセレクト用のお題カード一覧 */
+        .choice-section {
+            background-color: #f8fafc;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 2px solid #e2e8f0;
+        }
+
+        .choice-title {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            font-weight: bold;
+            text-align: left;
+        }
+
+        .choice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 10px;
+        }
+
+        .choice-card {
+            background-color: #ffffff;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 12px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: var(--text-color);
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 60px;
+            box-sizing: border-box;
+        }
+
+        .choice-card:hover:not(.solved):not(.disabled) {
+            border-color: var(--gold-border);
+            background-color: #fffbebf0;
+            transform: translateY(-2px);
+        }
+
+        .choice-card.selected {
+            border-color: var(--gold-border);
+            background-color: #fef3c7; /* 品のある薄いゴールド */
+            color: #92400e;
+            box-shadow: 0 0 10px var(--gold-glow);
+        }
+
+        .choice-card.solved {
+            border-color: var(--success-color);
+            background-color: #d1fae5;
+            color: #065f46;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .choice-card.disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* クイズ中央エリア */
+        .quiz-main {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .main-question {
+            font-size: 1.6rem;
+            font-weight: bold;
+            color: var(--text-color);
+            margin-bottom: 25px;
+            line-height: 1.4;
+            padding: 15px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            border-left: 5px solid var(--gold-border); /* 金色の左ライン */
+            text-align: left;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+        }
+
+        .sub-question-box {
+            background-color: #ffffff;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 2px solid var(--gold-border); /* 上品なゴールド枠 */
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(202, 138, 4, 0.08);
+        }
+
+        .sub-question-text {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--accent-red); /* 番組らしい赤文字 */
+            margin: 0;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* 画像表示エリア */
+        .sub-question-image-box {
+            max-width: 100%;
+            height: 250px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            display: none;
+            border: 2px solid var(--gold-border);
+            background-color: #f1f5f9;
+        }
+
+        .sub-question-image-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* 回答入力フォーム */
+        .answer-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .answer-form input[type="text"] {
+            flex: 1;
+            padding: 16px;
+            font-size: 1.4rem;
+            border-radius: 8px;
+            border: 2px solid #cbd5e1;
+            background-color: #f8fafc;
+            color: var(--text-color);
+            text-align: center;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+
+        .answer-form input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-red);
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.2);
+        }
+
+        .btn-submit {
+            width: auto;
+            padding: 0 35px;
+        }
+
+        /* プレイヤー進捗インジケーター（導火線ランプ） */
+        .status-indicator {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .player-lamp {
+            flex: 1;
+            background-color: #ffffff;
+            border: 2px solid #cbd5e1;
+            padding: 12px 5px;
+            text-align: center;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .player-lamp.wait {
+            background-color: #f8fafc;
+            color: #94a3b8;
+        }
+
+        .player-lamp.active {
+            background-color: #fef2f2; /* 上品な淡い赤 */
+            border-color: var(--accent-red);
+            color: #b91c1c; /* 濃い赤 */
+            box-shadow: 0 0 12px rgba(220, 38, 38, 0.25);
+            animation: pulse 1s infinite alternate;
+        }
+
+        .player-lamp.safe {
+            background-color: #d1fae5;
+            border-color: var(--success-color);
+            color: #065f46;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.15);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.75; }
+            100% { opacity: 1; }
+        }
+
+        /* 中断・スタンバイ制御用 */
+        .ready-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(241, 245, 249, 0.97); /* 明るく落ち着いた薄灰色背景 */
+            border-radius: 16px;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .ready-title {
+            font-size: 2.2rem;
+            color: var(--accent-red);
+            margin-bottom: 10px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .ready-desc {
+            font-size: 1.2rem;
+            color: var(--text-color);
+            margin-bottom: 30px;
+        }
+
+        /* 結果画面 */
+        .result-title {
+            font-size: 3.5rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .result-clear {
+            color: var(--gold-border);
+            text-shadow: 0 0 20px rgba(202, 138, 4, 0.3);
+        }
+
+        .result-bomb {
+            color: var(--danger-color);
+            text-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .result-details {
+            background-color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* ランキング表示スタイル */
+        .ranking-container {
+            background-color: #ffffff;
+            border: 2px solid var(--gold-border);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+
+        .ranking-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--gold-border);
+            text-align: center;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* ランキングタブ切替用スタイル */
+        .ranking-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .ranking-tab {
+            padding: 6px 16px;
+            border: 1px solid var(--gold-border);
+            background-color: #f8fafc;
+            color: var(--text-color);
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .ranking-tab.active {
+            background-color: var(--gold-border);
+            color: #ffffff;
+        }
+
+        .ranking-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .ranking-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 0.95rem;
+        }
+
+        .ranking-item:last-child {
+            border-bottom: none;
+        }
+
+        .ranking-rank {
+            font-weight: bold;
+            width: 50px;
+        }
+
+        .ranking-score {
+            font-weight: bold;
+            color: var(--accent-red);
+        }
+
+        .ranking-time {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .result-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        .result-buttons .btn {
+            flex: 1;
+        }
+
+        .empty-warning {
+            text-align: center;
+            color: var(--danger-color);
+            padding: 20px;
+            border: 2px dashed var(--danger-color);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-container" id="game-container">
+    
+    <div id="screen-lobby" class="screen active">
+        <h1>BOMBER CHALLENGE</h1>
+        
+        <div id="no-questions-warning" class="empty-warning" style="display: none;">
+            問題が1つも登録されていません。<br>
+            先に制作ツールで問題を登録するか、配布されたJSONファイルをインポートしてください。
+        </div>
+
+        <div class="form-group">
+            <label for="select-question">挑戦する問題を選択</label>
+            <select id="select-question"></select>
+        </div>
+
+        <div class="form-group">
+            <label for="select-mode">出題ルール</label>
+            <select id="select-mode">
+                <option value="choice" selected>🎯 フリーセレクト（事前に全お題を提示、選んで回答）</option>
+                <option value="classic">⏱️ クラシック（1人目から順番に強制出題）</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="select-time">チーム全体の制限時間</label>
+            <select id="select-time">
+                <option value="30">30秒 (超激辛)</option>
+                <option value="60" selected>60秒 (標準)</option>
+                <option value="90">90秒 (甘口)</option>
+                <option value="120">120秒 (初心者向け)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="input-players">挑戦する人数 (1〜10人)</label>
+            <input type="number" id="input-players" min="1" max="10" value="5">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 5px;" id="players-limit-info"></div>
+        </div>
+
+        <button type="button" class="btn btn-primary" id="btn-start-game">🚀 ゲームスタート！</button>
+    </div>
+
+    <div id="screen-play" class="screen">
+        <div id="ready-overlay" class="ready-overlay">
+            <div class="ready-title" id="overlay-title">1人目 スタンバイ！</div>
+            <p class="ready-desc" id="overlay-desc">解答席についたら、ボタンを押してスタートしてください！</p>
+            <button type="button" class="btn btn-primary" id="btn-resume" style="max-width: 300px;">🔥 タイマー始動！</button>
+        </div>
+
+        <div class="timer-text-container">
+            <span class="difficulty-badge" id="play-difficulty">NORMAL</span>
+            <div class="timer-digital" id="timer-display">60.0</div>
+        </div>
+
+        <div class="timer-container">
+            <div class="timer-bar" id="timer-bar"></div>
+        </div>
+
+        <div class="choice-section" id="choice-section" style="display: none;">
+            <div class="choice-title">💡 解く問題カードを1つ選んでください：</div>
+            <div class="choice-grid" id="choice-grid"></div>
+        </div>
+
+        <div class="quiz-main">
+            <div class="main-question" id="play-main-question">ここに主題が入ります。</div>
+            
+            <div class="sub-question-image-box" id="play-image-box">
+                <img id="play-sub-image" src="" alt="問題画像">
+            </div>
+
+            <div class="sub-question-box" id="play-sub-box">
+                <div class="sub-question-text" id="play-sub-question">お題テキスト</div>
+            </div>
+        </div>
+
+        <form class="answer-form" id="answer-form" autocomplete="off">
+            <input type="text" id="answer-input" placeholder="お題を選択して、ここに答えを入力！" required>
+            <button type="submit" class="btn btn-primary btn-submit">回答</button>
+        </form>
+
+        <div class="status-indicator" id="status-indicator">
+        </div>
+
+        <button type="button" class="btn btn-secondary" id="btn-quit-game" style="padding: 10px 20px; font-size: 1rem; margin-top: 15px;">ゲームを中断して戻る</button>
+    </div>
+
+    <div id="screen-result" class="screen">
+        <div id="result-visual">
+            <h1 class="result-title result-clear" id="result-status">GAME CLEAR!!</h1>
+        </div>
+
+        <div class="result-details">
+            <p><strong>挑んだ問題:</strong> <span id="result-q-text">問題テーマ</span></p>
+            <p><strong>クリア状況:</strong> <span id="result-players">5問中5問</span></p>
+            <p><strong>残り時間:</strong> <span id="result-time">12.4秒</span></p>
+            <p><strong>獲得ポイント:</strong> <span id="result-score" style="font-weight: bold; color: var(--accent-red);">0 pt</span></p>
+        </div>
+
+        <div class="ranking-container">
+            <div class="ranking-title">🏆 ハイスコアランキング 🏆</div>
+            <div class="ranking-tabs">
+                <button type="button" class="ranking-tab active" id="tab-today">今日のランキング</button>
+                <button type="button" class="ranking-tab" id="tab-overall">総合ランキング</button>
+            </div>
+            <ul class="ranking-list" id="ranking-list">
+                <li class="ranking-item">読み込み中...</li>
+            </ul>
+        </div>
+
+        <div class="result-buttons">
+            <button type="button" class="btn btn-primary" id="btn-to-lobby">もう一度遊ぶ</button>
+            <button type="button" class="btn btn-secondary" id="btn-exit-game">終了する</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- Supabase設定 ---
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    // --- 音声合成エンジン (Web Audio API) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 正解音
+    function playCorrectSound() {
+        const now = audioCtx.currentTime;
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc1.type = 'sine';
+        osc2.type = 'triangle';
+
+        osc1.frequency.setValueAtTime(523.25, now);
+        osc1.frequency.setValueAtTime(659.25, now + 0.08);
+        osc1.frequency.setValueAtTime(783.99, now + 0.16);
+        osc1.frequency.setValueAtTime(1046.50, now + 0.24);
+
+        osc2.frequency.setValueAtTime(1046.50, now + 0.24);
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc1.start(now);
+        osc2.start(now + 0.24);
+        osc1.stop(now + 0.7);
+        osc2.stop(now + 0.7);
+    }
+
+    // 爆発音
+    function playExplosionSound() {
+        const now = audioCtx.currentTime;
+        const bufferSize = audioCtx.sampleRate * 2;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1000, now);
+        filter.frequency.exponentialRampToValueAtTime(20, now + 1.8);
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.6, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 1.8);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        noise.start(now);
+        noise.stop(now + 1.8);
+    }
+
+    // カウントダウン警告音
+    function playTickSound(isUrgent = false) {
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(isUrgent ? 1200 : 800, now);
+
+        gain.gain.setValueAtTime(isUrgent ? 0.25 : 0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.06);
+    }
+
+    // --- ゲーム本体ロジック ---
+    let questions = [];
+    let currentQuestion = null;
+    let gameMode = 'choice'; // 'classic' or 'choice'
+    let totalPlayers = 5;
+    let maxTimeLimit = 60;
+    let remainingTime = 60;
+    let currentRound = 0; // 解答された累計問題数 (0から数えて全問題数に達するまで)
+    let timerInterval = null;
+    let isTimerRunning = false;
+
+    // 解答管理用変数
+    let selectedSubIndex = null; 
+    let solvedSubIndices = []; // 正解済みのインデックスリスト
+
+    // ランキング保持用データ
+    let cachedTodayRanking = [];
+    let cachedOverallRanking = [];
+
+    // DOM要素の取得
+    const container = document.getElementById('game-container');
+    const screenLobby = document.getElementById('screen-lobby');
+    const screenPlay = document.getElementById('screen-play');
+    const screenResult = document.getElementById('screen-result');
+    const selectQuestion = document.getElementById('select-question');
+    const selectMode = document.getElementById('select-mode');
+    const selectTime = document.getElementById('select-time');
+    const inputPlayers = document.getElementById('input-players');
+    const playersLimitInfo = document.getElementById('players-limit-info');
+    const noQuestionsWarning = document.getElementById('no-questions-warning');
+    const btnStartGame = document.getElementById('btn-start-game');
+
+    const readyOverlay = document.getElementById('ready-overlay');
+    const overlayTitle = document.getElementById('overlay-title');
+    const overlayDesc = document.getElementById('overlay-desc');
+    const btnResume = document.getElementById('btn-resume');
+
+    const timerDisplay = document.getElementById('timer-display');
+    const timerBar = document.getElementById('timer-bar');
+    const playDifficulty = document.getElementById('play-difficulty');
+    const playMainQuestion = document.getElementById('play-main-question');
+    const playImageBox = document.getElementById('play-image-box');
+    const playSubImage = document.getElementById('play-sub-image');
+    const playSubBox = document.getElementById('play-sub-box');
+    const playSubQuestion = document.getElementById('play-sub-question');
+    const answerForm = document.getElementById('answer-form');
+    const answerInput = document.getElementById('answer-input');
+    const statusIndicator = document.getElementById('status-indicator');
+    const btnQuitGame = document.getElementById('btn-quit-game');
+
+    const choiceSection = document.getElementById('choice-section');
+    const choiceGrid = document.getElementById('choice-grid');
+
+    const resultStatus = document.getElementById('result-status');
+    const resultQText = document.getElementById('result-q-text');
+    const resultPlayers = document.getElementById('result-players');
+    const resultTime = document.getElementById('result-time');
+    const resultScore = document.getElementById('result-score');
+    const rankingList = document.getElementById('ranking-list');
+    const tabToday = document.getElementById('tab-today');
+    const tabOverall = document.getElementById('tab-overall');
+    const btnToLobby = document.getElementById('btn-to-lobby');
+    const btnExitGame = document.getElementById('btn-exit-game');
+
+    // 初期起動時の処理
+    loadQuestions();
+
+    async function loadQuestions() {
+        let loadedData = null;
+
+        // 1. Supabaseのquiz_dataテーブル (five_bomberカラム) からデータ取得を試行
+        try {
+            const { data, error } = await supabaseClient
+                .from('quiz_data')
+                .select('five_bomber')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .single();
+
+            if (!error && data && data.five_bomber) {
+                let fetched = data.five_bomber;
+                if (Array.isArray(fetched)) {
+                    loadedData = fetched;
+                } else if (fetched && Array.isArray(fetched.questions)) {
+                    loadedData = fetched.questions;
+                }
+            }
+        } catch (e) {
+            console.warn('Supabaseからの読み込みに失敗、ローカルストレージを確認します:', e);
+        }
+
+        // 2. Supabaseで取得できない場合はローカルストレージをフォールバックとして確認
+        if (!loadedData || loadedData.length === 0) {
+            const localStr = localStorage.getItem('five_bomber_questions');
+            if (localStr) {
+                try {
+                    const parsed = JSON.parse(localStr);
+                    if (Array.isArray(parsed)) {
+                        loadedData = parsed;
+                    } else if (parsed && Array.isArray(parsed.questions)) {
+                        loadedData = parsed.questions;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        questions = loadedData || [];
+
+        if (questions.length === 0) {
+            noQuestionsWarning.style.display = 'block';
+            selectQuestion.disabled = true;
+            btnStartGame.disabled = true;
+            return;
+        }
+
+        noQuestionsWarning.style.display = 'none';
+        selectQuestion.disabled = false;
+        btnStartGame.disabled = false;
+
+        // 問題セレクトボックスの生成
+        selectQuestion.innerHTML = '';
+
+        const randomOpt = document.createElement('option');
+        randomOpt.value = 'random';
+        randomOpt.textContent = '🎲 ランダム（登録問題からランダムに出題）';
+        selectQuestion.appendChild(randomOpt);
+
+        questions.forEach((q, idx) => {
+            const opt = document.createElement('option');
+            opt.value = idx;
+            const diffStr = (q.difficulty || 'normal').toUpperCase();
+            const qText = q.question || '';
+            const ansCount = q.answers ? q.answers.length : 0;
+            opt.textContent = `${diffStr} | ${qText.substring(0, 25)}${qText.length > 25 ? '...' : ''} (${ansCount}問)`;
+            selectQuestion.appendChild(opt);
+        });
+
+        updatePlayersLimit();
+    }
+
+    // 選択中の問題に合わせて、設定可能な最大人数を更新
+    selectQuestion.addEventListener('change', updatePlayersLimit);
+
+    function updatePlayersLimit() {
+        if (questions.length === 0) return;
+        
+        let maxQ = 10; // HTML側の制約に合わせ最大上限は10人
+
+        if (selectQuestion.value === 'random') {
+            maxQ = Math.min(...questions.map(q => q.answers ? q.answers.length : 0));
+            playersLimitInfo.textContent = `※ランダム時は最大 ${maxQ} 人まで設定可能です。`;
+        } else {
+            const selectedQ = questions[selectQuestion.value];
+            maxQ = selectedQ.answers ? selectedQ.answers.length : 0;
+            playersLimitInfo.textContent = `※登録されている問題数は全 ${maxQ} 問です。`;
+        }
+
+        inputPlayers.max = 10;
+    }
+
+    // 広辞苑問題（個別の小問テキストや小問画像が存在しない問題）か判定するユーティリティ関数
+    function checkIsKojienType(question) {
+        if (!question) return true;
+        const hasSpecificSubQuestion = question.subQuestions && 
+            question.subQuestions.some(sq => sq && sq.trim() !== "");
+        const hasSubImages = question.subImages && 
+            question.subImages.some(img => img && img.trim() !== "");
+        return !hasSpecificSubQuestion && !hasSubImages;
+    }
+
+    // ターン数から現在の解答プレイヤーのインデックス(0〜totalPlayers-1)を計算する関数
+    function getPlayerIndexForRound(round, players) {
+        if (players <= 1) return 0;
+        const cycle = 2 * players;
+        const mod = round % cycle;
+        if (mod < players) {
+            return mod; // 往路 (0, 1, 2, 3...)
+        } else {
+            return cycle - 1 - mod; // 復路 (...3, 2, 1, 0)
+        }
+    }
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    // --- ゲーム開始処理 ---
+    btnStartGame.addEventListener('click', () => {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
+        let selectedIndex = selectQuestion.value;
+        if (selectedIndex === 'random') {
+            selectedIndex = Math.floor(Math.random() * questions.length);
+        }
+
+        currentQuestion = questions[selectedIndex];
+        gameMode = selectMode.value;
+        maxTimeLimit = parseFloat(selectTime.value);
+        remainingTime = maxTimeLimit;
+        
+        totalPlayers = parseInt(inputPlayers.value);
+        currentRound = 0;
+
+        selectedSubIndex = null;
+        solvedSubIndices = [];
+
+        setupPlayScreen();
+        showScreen('screen-play');
+        
+        showStandbyOverlay();
+    });
+
+    // プレイ画面全体のUIリセット・生成
+    function setupPlayScreen() {
+        const diff = (currentQuestion.difficulty || 'normal').toLowerCase();
+        playDifficulty.textContent = diff.toUpperCase();
+        playDifficulty.style.backgroundColor = 
+            diff === 'easy' ? 'var(--success-color)' :
+            diff === 'hard' ? 'var(--danger-color)' : 'var(--gold-border)';
+        
+        playMainQuestion.textContent = currentQuestion.question;
+
+        updateTimerUI();
+
+        // プレイヤーインジケーター（導火線ランプ）の生成
+        statusIndicator.innerHTML = '';
+        for (let i = 0; i < totalPlayers; i++) {
+            const lamp = document.createElement('div');
+            lamp.className = 'player-lamp wait';
+            lamp.id = `lamp-${i}`;
+            lamp.textContent = `${i + 1}人目`;
+            statusIndicator.appendChild(lamp);
+        }
+
+        const isKojien = checkIsKojienType(currentQuestion);
+
+        // --- ルールごとのUI切り替え（広辞苑問題の場合はフリーセレクトでもカード非表示） ---
+        if (gameMode === 'choice' && !isKojien) {
+            choiceSection.style.display = 'block';
+            generateChoiceCards();
+            answerInput.placeholder = "👈 まず、上から挑戦するカードを選択してください";
+        } else {
+            choiceSection.style.display = 'none';
+            answerInput.placeholder = "ここに答えを入力してEnter！";
+        }
+    }
+
+    // フリーセレクト：お題カードの生成
+    function generateChoiceCards() {
+        choiceGrid.innerHTML = '';
+        const numQuestions = currentQuestion.answers ? currentQuestion.answers.length : 0;
+
+        for (let i = 0; i < numQuestions; i++) {
+            const card = document.createElement('div');
+            card.className = 'choice-card';
+            card.id = `choice-card-${i}`;
+
+            let title = `お題 ${i + 1}`;
+            const subQText = currentQuestion.subQuestions && currentQuestion.subQuestions[i];
+            const hasImage = currentQuestion.subImages && currentQuestion.subImages[i];
+
+            if (subQText) {
+                const limitText = subQText.length > 8 ? subQText.substring(0, 8) + '..' : subQText;
+                title = hasImage ? `🖼️ ${limitText}` : limitText;
+            } else if (hasImage) {
+                title = `🖼️ お題 ${i + 1}`;
+            }
+
+            card.textContent = title;
+
+            card.addEventListener('click', () => {
+                if (!isTimerRunning) return;
+                if (solvedSubIndices.includes(i)) return;
+
+                selectSubQuestion(i);
+            });
+
+            choiceGrid.appendChild(card);
+        }
+    }
+
+    // フリーセレクト：特定のお題カードを選択した時
+    function selectSubQuestion(index) {
+        selectedSubIndex = index;
+
+        document.querySelectorAll('.choice-card').forEach((card, idx) => {
+            if (solvedSubIndices.includes(idx)) {
+                card.className = 'choice-card solved';
+            } else {
+                card.className = 'choice-card';
+            }
+        });
+        document.getElementById(`choice-card-${index}`).classList.add('selected');
+
+        loadSubQuestionContent(index);
+        answerInput.placeholder = "選んだお題の答えを入力！";
+        answerInput.focus();
+    }
+
+    // 小問（お題＆画像）のロード
+    function loadSubQuestionContent(index) {
+        if (index === null || index === undefined) {
+            playSubImage.src = '';
+            playImageBox.style.display = 'none';
+            playSubQuestion.textContent = '？お題を選択してください？';
+            playSubBox.style.display = 'flex';
+            return;
+        }
+
+        const hasImages = currentQuestion.subImages && currentQuestion.subImages[index];
+        if (hasImages) {
+            playSubImage.src = currentQuestion.subImages[index];
+            playImageBox.style.display = 'block';
+        } else {
+            playSubImage.src = '';
+            playImageBox.style.display = 'none';
+        }
+
+        const hasSubQ = currentQuestion.subQuestions && currentQuestion.subQuestions[index];
+        if (hasSubQ) {
+            playSubQuestion.textContent = currentQuestion.subQuestions[index];
+            playSubBox.style.display = 'flex';
+        } else {
+            if (hasImages) {
+                playSubBox.style.display = 'none';
+            } else {
+                playSubQuestion.textContent = `第 ${index + 1} 問`;
+                playSubBox.style.display = 'flex';
+            }
+        }
+    }
+
+    // スタンバイ（一時停止）画面を出す
+    function showStandbyOverlay() {
+        stopTimer();
+        updateIndicators();
+
+        const activePlayerIdx = getPlayerIndexForRound(currentRound, totalPlayers);
+        const numStr = (activePlayerIdx + 1) + "人目";
+        overlayTitle.textContent = `${numStr} スタンバイ！`;
+
+        const isKojien = checkIsKojienType(currentQuestion);
+
+        overlayDesc.textContent = (gameMode === 'choice' && !isKojien)
+            ? `カードを選んでから答えるルールです。心の準備ができたらスタート！`
+            : `答える準備ができたらスタートしてください！`;
+
+        answerInput.value = '';
+
+        if (gameMode === 'choice' && !isKojien) {
+            document.querySelectorAll('.choice-card').forEach(card => {
+                if (!card.classList.contains('solved')) {
+                    card.classList.add('disabled');
+                }
+            });
+            loadSubQuestionContent(null);
+            selectedSubIndex = null;
+        } else {
+            // クラシックモードまたは広辞苑問題
+            if (!isKojien) {
+                loadSubQuestionContent(currentRound);
+            } else {
+                playSubImage.src = '';
+                playImageBox.style.display = 'none';
+                playSubQuestion.textContent = `解答 ${currentRound + 1} つ目`;
+                playSubBox.style.display = 'flex';
+            }
+        }
+
+        readyOverlay.style.display = 'flex';
+        btnResume.focus();
+    }
+
+    // インジケーター（下部の1人目〜ランプ）の制御
+    function updateIndicators() {
+        const activePlayerIdx = getPlayerIndexForRound(currentRound, totalPlayers);
+        for (let i = 0; i < totalPlayers; i++) {
+            const lamp = document.getElementById(`lamp-${i}`);
+            if (!lamp) continue;
+
+            if (i === activePlayerIdx) {
+                lamp.className = 'player-lamp active';
+            } else {
+                lamp.className = 'player-lamp wait';
+            }
+        }
+    }
+
+    // スタンバイ解除・タイマー再開
+    btnResume.addEventListener('click', () => {
+        readyOverlay.style.display = 'none';
+        startTimer();
+
+        const isKojien = checkIsKojienType(currentQuestion);
+
+        if (gameMode === 'choice' && !isKojien) {
+            document.querySelectorAll('.choice-card').forEach(card => {
+                card.classList.remove('disabled');
+            });
+            answerInput.placeholder = "👈 上のカードから解きたいお題を選んでください";
+        } else {
+            answerInput.placeholder = "ここに答えを入力してEnter！";
+            answerInput.focus();
+        }
+    });
+
+    // --- タイマーコントロール ---
+    function startTimer() {
+        if (isTimerRunning) return;
+        isTimerRunning = true;
+
+        let lastSec = Math.ceil(remainingTime);
+
+        timerInterval = setInterval(() => {
+            remainingTime -= 0.1;
+            if (remainingTime <= 0) {
+                remainingTime = 0;
+                updateTimerUI();
+                gameOver(false); // タイムアップ（爆発）
+            } else {
+                updateTimerUI();
+                
+                const currentSec = Math.ceil(remainingTime);
+                if (currentSec !== lastSec && currentSec <= 10) {
+                    playTickSound(currentSec <= 4);
+                }
+                lastSec = currentSec;
+            }
+        }, 100);
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        isTimerRunning = false;
+    }
+
+    function updateTimerUI() {
+        timerDisplay.textContent = remainingTime.toFixed(1);
+
+        const pct = (remainingTime / maxTimeLimit) * 100;
+        timerBar.style.width = `${pct}%`;
+
+        if (pct < 25) {
+            timerDisplay.style.color = 'var(--danger-color)';
+        } else if (pct < 50) {
+            timerDisplay.style.color = '#facc15';
+        } else {
+            timerDisplay.style.color = 'var(--accent-red)';
+        }
+    }
+
+    // --- 回答判定処理 ---
+    answerForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!isTimerRunning) return;
+
+        const isKojien = checkIsKojienType(currentQuestion);
+
+        if (gameMode === 'choice' && !isKojien && selectedSubIndex === null) {
+            alert("先に挑戦する「お題カード」を選択してください！");
+            return;
+        }
+
+        const userAns = answerInput.value;
+        const normalizedUser = normalizeString(userAns);
+
+        if (!normalizedUser) return;
+
+        let matchedIndex = -1;
+
+        if (gameMode === 'choice' && !isKojien) {
+            // フリーセレクト（通常問題）：選択されている枠の答えとマッチするか確認
+            const correctAnswers = currentQuestion.answers[selectedSubIndex];
+            const isMatch = Array.isArray(correctAnswers)
+                ? correctAnswers.some(ans => normalizeString(ans) === normalizedUser)
+                : normalizeString(correctAnswers) === normalizedUser;
+
+            if (isMatch && !solvedSubIndices.includes(selectedSubIndex)) {
+                matchedIndex = selectedSubIndex;
+            }
+        } else {
+            // クラシックモード または 広辞苑問題：未回答の正解データの中からマッチするものを検索
+            matchedIndex = currentQuestion.answers.findIndex((ansCandidates, idx) => {
+                if (solvedSubIndices.includes(idx)) return false; // 既出の正解は除外
+
+                return Array.isArray(ansCandidates)
+                    ? ansCandidates.some(ans => normalizeString(ans) === normalizedUser)
+                    : normalizeString(ansCandidates) === normalizedUser;
+            });
+        }
+
+        if (matchedIndex !== -1) {
+            // 正解処理
+            playCorrectSound();
+            solvedSubIndices.push(matchedIndex);
+
+            if (gameMode === 'choice' && !isKojien) {
+                const solvedCard = document.getElementById(`choice-card-${matchedIndex}`);
+                if (solvedCard) {
+                    solvedCard.className = 'choice-card solved';
+                    solvedCard.textContent = "✅ 正解！";
+                }
+            }
+
+            currentRound++; // クリアした問題数を加算
+
+            if (currentRound >= currentQuestion.answers.length) {
+                // 全問題（例: 10問）をすべてクリアした
+                gameOver(true);
+            } else {
+                // 折り返された次のプレイヤーのスタンバイへ
+                showStandbyOverlay();
+            }
+        } else {
+            // 不正解またはすでに答えた解答
+            answerInput.style.borderColor = 'var(--danger-color)';
+            answerInput.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.5)';
+            setTimeout(() => {
+                answerInput.style.borderColor = 'var(--accent-red)';
+                answerInput.style.boxShadow = '';
+            }, 500);
+            answerInput.value = '';
+            answerInput.focus();
+        }
+    });
+
+    // 表記揺れ吸収用
+    function normalizeString(str) {
+        if (!str) return "";
+        return str
+            .trim()
+            .toLowerCase()
+            .replace(/[\u30a1-\u30f6]/g, function(match) {
+                const chr = match.charCodeAt(0) - 0x60;
+                return String.fromCharCode(chr);
+            })
+            .replace(/[！-～]/g, function(match) {
+                return String.fromCharCode(match.charCodeAt(0) - 0xfee0);
+            })
+            .replace(/[\s ]/g, "");
+    }
+
+    // --- ゲーム終了（クリア or 爆破） ---
+    async function gameOver(isClear) {
+        stopTimer();
+
+        const totalAns = currentQuestion.answers ? currentQuestion.answers.length : 0;
+        
+        // 得点計算（解いた問題数の割合％、切り捨て）
+        let calculatedScore = 0;
+        if (totalAns > 0) {
+            calculatedScore = Math.floor((currentRound / totalAns) * 100);
+            // 全問正解時のボーナスポイント（問題数分追加）
+            if (isClear && currentRound === totalAns) {
+                calculatedScore += totalAns;
+            }
+        }
+
+        // 経過時間（かかった時間）の算出
+        const timeTaken = parseFloat((maxTimeLimit - remainingTime).toFixed(1));
+
+        if (isClear) {
+            resultStatus.textContent = "GAME CLEAR!!";
+            resultStatus.className = "result-title result-clear";
+            resultTime.textContent = `${remainingTime.toFixed(1)} 秒`;
+            for (let i = 0; i < totalPlayers; i++) {
+                const lamp = document.getElementById(`lamp-${i}`);
+                if (lamp) lamp.className = 'player-lamp safe';
+            }
+        } else {
+            playExplosionSound();
+            
+            document.body.style.backgroundColor = '#7f1d1d';
+            container.classList.add('shake-effect');
+            
+            resultStatus.textContent = "BOMB!!!";
+            resultStatus.className = "result-title result-bomb";
+            resultTime.textContent = "0.0 秒 (タイムアップ)";
+
+            setTimeout(() => {
+                document.body.style.backgroundColor = '';
+                container.classList.remove('shake-effect');
+                showScreen('screen-result');
+            }, 1500);
+        }
+
+        writeResultDetails(calculatedScore);
+
+        // Supabaseへスコアを保存してランキングを読み込む
+        await saveRecordAndFetchRanking(calculatedScore, timeTaken);
+
+        if (isClear) {
+            showScreen('screen-result');
+        }
+    }
+
+    function writeResultDetails(score) {
+        resultQText.textContent = currentQuestion.question;
+        const totalAns = currentQuestion.answers ? currentQuestion.answers.length : 0;
+        resultPlayers.textContent = `${currentRound} 問 / 全 ${totalAns} 問 (参加者 ${totalPlayers} 人)`;
+        resultScore.textContent = `${score} pt`;
+    }
+
+    // --- Supabase連携：記録保存＆ランキング取得 ---
+    async function saveRecordAndFetchRanking(score, timeTaken) {
+        rankingList.innerHTML = '<li class="ranking-item">読み込み中...</li>';
+
+        try {
+            // 1. スコアを Supabase (daily_records_bomber) に登録
+            await supabaseClient
+                .from('daily_records_bomber')
+                .insert([
+                    {
+                        five_bomber: score,
+                        five_bomber_time: timeTaken
+                    }
+                ]);
+
+            // 2. 全レコードを取得 (上位100件など)
+            const { data, error } = await supabaseClient
+                .from('daily_records_bomber')
+                .select('five_bomber, five_bomber_time, created_at')
+                .order('five_bomber', { ascending: false })
+                .order('five_bomber_time', { ascending: true })
+                .limit(100);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                // 今日の日付を取得 (YYYY-MM-DD)
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                // 全データから総合と今日のランキングに分類
+                cachedOverallRanking = data.slice(0, 10);
+                cachedTodayRanking = data.filter(item => {
+                    if (!item.created_at) return false;
+                    const itemDate = new Date(item.created_at);
+                    const itemDateStr = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}-${String(itemDate.getDate()).padStart(2, '0')}`;
+                    return itemDateStr === todayStr;
+                }).slice(0, 10);
+
+                // デフォルトで「今日のランキング」を表示
+                renderRankingList(cachedTodayRanking);
+            } else {
+                rankingList.innerHTML = '<li class="ranking-item">まだ記録がありません</li>';
+            }
+        } catch (e) {
+            console.error('ランキング処理エラー:', e);
+            rankingList.innerHTML = '<li class="ranking-item">ランキングの取得に失敗しました</li>';
+        }
+    }
+
+    // ランキング描画用関数
+    function renderRankingList(items) {
+        rankingList.innerHTML = '';
+        if (!items || items.length === 0) {
+            rankingList.innerHTML = '<li class="ranking-item">対象の記録がありません</li>';
+            return;
+        }
+
+        items.forEach((item, index) => {
+            const li = document.createElement('li');
+            li.className = 'ranking-item';
+
+            let medal = `${index + 1}位`;
+            if (index === 0) medal = '🥇 1位';
+            else if (index === 1) medal = '🥈 2位';
+            else if (index === 2) medal = '🥉 3位';
+
+            const timeStr = item.five_bomber_time !== null ? `${item.five_bomber_time}秒` : '-';
+            
+            li.innerHTML = `
+                <span class="ranking-rank">${medal}</span>
+                <span class="ranking-score">${item.five_bomber} pt</span>
+                <span class="ranking-time">⏱️ ${timeStr}</span>
+            `;
+            rankingList.appendChild(li);
+        });
+    }
+
+    // ランキングタブ切り替え処理
+    tabToday.addEventListener('click', () => {
+        tabToday.classList.add('active');
+        tabOverall.classList.remove('active');
+        renderRankingList(cachedTodayRanking);
+    });
+
+    tabOverall.addEventListener('click', () => {
+        tabOverall.classList.add('active');
+        tabToday.classList.remove('active');
+        renderRankingList(cachedOverallRanking);
+    });
+
+    btnToLobby.addEventListener('click', () => {
+        loadQuestions();
+        showScreen('screen-lobby');
+    });
+
+    // 終了するボタン：ウィンドウ/タブを閉じる処理
+    btnExitGame.addEventListener('click', () => {
+        window.close();
+    });
+
+    btnQuitGame.addEventListener('click', () => {
+        if (confirm('ゲームを中断して最初の画面に戻りますか？')) {
+            stopTimer();
+            loadQuestions();
+            showScreen('screen-lobby');
+        }
+    });
+</script>
+
+</body>
+</html>
