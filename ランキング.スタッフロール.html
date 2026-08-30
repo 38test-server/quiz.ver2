@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全ゲームランキング ＆ クレジット表示</title>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* ----------------------------------------------------
+           カスタマイズ用変数（変更しやすいように集約しています）
+        ---------------------------------------------------- */
+        :root {
+            /* 配色設定（水色、青、黄色基調） */
+            --bg-color-1: #e0f2fe;        /* 背景グラデーション用（淡い水色） */
+            --bg-color-2: #0284c7;        /* 背景グラデーション用（青） */
+            --title-color: #facc15;       /* メインタイトル色（鮮やかな黄色） */
+            --subtitle-color: #38bdf8;    /* サブタイトル・順位色（明るい水色） */
+            --text-color: #ffffff;        /* 基本文字色（白） */
+            --border-color: #fde047;      /* 下線・装飾枠線（ライトイエロー） */
+
+            /* フォント設定 */
+            --font-family: 'BIZ UDP明朝', 'BIZ UDPMincho', 'Hiragino Mincho ProN', serif;
+            --base-font-size: 32px;       /* 通常行のフォントサイズ（28px以上） */
+            --header-font-size: 64px;     /* タイトル・クレジット初行のフォントサイズ */
+            --subheader-font-size: 42px;  /* セクション見出しのフォントサイズ */
+
+            /* スクロールアニメーション速度の設定 */
+            /* 1行あたり約2秒の基準時間（ミリ秒） */
+            --time-per-line-ms: 2000ms;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, var(--bg-color-2) 0%, #0369a1 50%, #0c4a6e 100%);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            font-weight: bold; /* 全体を通して太字 */
+            font-size: var(--base-font-size);
+            overflow: hidden; /* スクロールバー非表示 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 画面中央固定コンテナ */
+        #viewport {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            text-align: center;
+        }
+
+        /* アニメーションされるコンテンツ領域 */
+        .scroll-container {
+            width: 90%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            top: 100vh; /* 初期位置を画面下部に固定してチラつきを防止 */
+            will-change: transform;
+        }
+
+        /* ----------------------------------------------------
+           文字・テキスト装飾デザイン
+        ---------------------------------------------------- */
+        .title-large {
+            font-size: var(--header-font-size);
+            color: var(--title-color);
+            text-shadow: 0 0 20px rgba(250, 204, 21, 0.6), 3px 3px 6px #000;
+            margin-bottom: 25px;
+            letter-spacing: 2px;
+            line-height: 1.2;
+            border-bottom: 4px solid var(--border-color);
+            padding-bottom: 15px;
+            width: 100%;
+        }
+
+        .section-header {
+            font-size: var(--subheader-font-size);
+            color: var(--subtitle-color);
+            text-shadow: 0 0 12px rgba(56, 189, 248, 0.5), 2px 2px 4px #000;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+
+        .row-item {
+            margin: 12px 0;
+            line-height: 1.5;
+            text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 25px;
+            width: 100%;
+        }
+
+        .rank-num {
+            color: var(--title-color);
+            min-width: 120px;
+            text-align: right;
+        }
+
+        .score-val {
+            color: #ffffff;
+        }
+
+        .time-val {
+            color: #e0f2fe;
+            font-size: 0.9em;
+        }
+
+        /* クレジット表示用 */
+        .credit-line {
+            margin: 10px 0;
+            line-height: 1.6;
+            text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.8);
+            word-break: break-all;
+        }
+
+        .credit-first-line {
+            font-size: var(--header-font-size);
+            color: var(--title-color);
+            text-shadow: 0 0 20px rgba(250, 204, 21, 0.6), 3px 3px 6px #000;
+            margin-bottom: 30px;
+            border-bottom: 4px solid var(--border-color);
+            padding-bottom: 15px;
+            width: 100%;
+        }
+
+        /* ----------------------------------------------------
+           CSS アニメーション定義（下から上への低速スクロール）
+        ---------------------------------------------------- */
+        @keyframes scrollUp {
+            0% {
+                transform: translateY(0);
+            }
+            100% {
+                transform: translateY(calc(-100% - 100vh));
+            }
+        }
+
+        .animating {
+            animation-name: scrollUp;
+            animation-timing-function: linear;
+            animation-fill-mode: forwards;
+        }
+
+        /* 一時停止用のスタイル */
+        .paused {
+            animation-play-state: paused !important;
+        }
+
+        /* 速度表示用インジケーター */
+        #speed-indicator {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            color: var(--title-color);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 24px;
+            font-family: sans-serif;
+            z-index: 1000;
+            display: none;
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+<div id="viewport">
+    <div id="scroll-content" class="scroll-container">
+        <!-- JSでここにコンテンツが挿入されます -->
+    </div>
+</div>
+
+<div id="speed-indicator">速度: 1.0x</div>
+
+<script>
+    // ====================================================
+    // Supabase 設定
+    // ====================================================
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ====================================================
+    // 表示ループ設定 (順序定義)
+    // ====================================================
+    const GAMES_CONFIG = [
+        { key: 'league',   name: 'ファイブリーグ',         table: 'daily_records_league',   scoreCol: 'five_league',   timeCol: 'five_league_time' },
+        { key: 'bomber',   name: 'ファイブボンバー',       table: 'daily_records_bomber',   scoreCol: 'five_bomber',   timeCol: 'five_bomber_time' },
+        { key: 'balloon',  name: 'パーセントバルーン',     table: 'daily_records_ballon',  scoreCol: 'percent_ballon', timeCol: 'percent_ballon_time' },
+        { key: 'factory',  name: 'ロゴファクトリー',       table: 'daily_records',  scoreCol: 'logo_factory',  timeCol: 'logo_factory_time' },
+        { key: 'torokko',  name: 'トロッコアドベンチャー', table: 'daily_records_torokko',  scoreCol: 'torokko',       timeCol: 'torokko_time' }
+    ];
+
+    // 1行あたりのスクロール秒数（デフォルト: 2秒）
+    const SECONDS_PER_LINE = 2;
+
+    const scrollContent = document.getElementById('scroll-content');
+    const speedIndicator = document.getElementById('speed-indicator');
+    let isPaused = false;
+    let speedMultiplier = 1.0;
+
+    // ====================================================
+    // メイン制御ルーチン (1周実行後にページリロード)
+    // ====================================================
+    async function startDisplayLoop() {
+        // 1. 各ゲームのランキングを順番に表示
+        for (const game of GAMES_CONFIG) {
+            await displayGameRanking(game);
+        }
+
+        // 2. クレジットテキストの表示
+        await displayCredits();
+
+        // 3. 1周完了後にページを再読み込み（データ・表示を最新状態に更新）
+        window.location.reload();
+    }
+
+    // ====================================================
+    // ゲームランキング取得・表示関数
+    // ====================================================
+    async function displayGameRanking(game) {
+        // Supabaseよりデータ取得
+        const { todayData, overallData } = await fetchRankingData(game);
+
+        // HTML生成
+        let html = `<div class="title-large">${game.name}</div>`;
+
+        // 今日のランキング
+        html += `<div class="section-header">【今日のランキング】</div>`;
+        html += renderRankingRows(todayData, game.scoreCol, game.timeCol);
+
+        // 総合ランキング
+        html += `<div class="section-header">【総合ランキング】</div>`;
+        html += renderRankingRows(overallData, game.scoreCol, game.timeCol);
+
+        // コンテンツをセットしてスクロールアニメーション実行
+        await animateContent(html);
+    }
+
+    // Supabaseから「今日」と「総合」のデータを取得
+    async function fetchRankingData(game) {
+        let todayData = [];
+        let overallData = [];
+
+        try {
+            const { data, error } = await supabaseClient
+                .from(game.table)
+                .select('*')
+                .order(game.scoreCol, { ascending: false })
+                .order(game.timeCol, { ascending: true });
+
+            if (!error && data) {
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                // 総合ランキングは50位まで取得
+                overallData = data.slice(0, 50);
+
+                // 今日のランキングは上限制限なし（全件取得）
+                todayData = data.filter(item => {
+                    if (!item.created_at) return false;
+                    const itemDate = new Date(item.created_at);
+                    const itemDateStr = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}-${String(itemDate.getDate()).padStart(2, '0')}`;
+                    return itemDateStr === todayStr;
+                });
+            }
+        } catch (e) {
+            console.warn(`[${game.name}] データ取得失敗:`, e);
+        }
+
+        return { todayData, overallData };
+    }
+
+    // 行表示用のHTML生成
+    function renderRankingRows(items, scoreCol, timeCol) {
+        if (!items || items.length === 0) {
+            return `<div class="row-item">記録がありません</div>`;
+        }
+
+        return items.map((item, idx) => {
+            const rankStr = `${idx + 1}位`;
+            const scoreVal = item[scoreCol] !== undefined && item[scoreCol] !== null ? `${item[scoreCol]} pt` : '-';
+            const timeVal = item[timeCol] !== undefined && item[timeCol] !== null ? `${parseFloat(item[timeCol]).toFixed(1)}秒` : '';
+            
+            return `
+                <div class="row-item">
+                    <span class="rank-num">${rankStr}</span>
+                    <span class="score-val">${scoreVal}</span>
+                    <span class="time-val">${timeVal ? '⏱️ ' + timeVal : ''}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ====================================================
+    // クレジット取得・表示関数
+    // ====================================================
+    async function displayCredits() {
+        let lines = [];
+        try {
+            // 同一フォルダ内の credits.txt を読み込み
+            const response = await fetch('credits.txt');
+            if (response.ok) {
+                const text = await response.text();
+                lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+            } else {
+                lines = ['クレジット', 'credits.txt が見つかりません'];
+            }
+        } catch (e) {
+            lines = ['クレジット', 'credits.txt の読み込みに失敗しました'];
+        }
+
+        // HTML構築（初行のみ巨大化）
+        let html = '';
+        lines.forEach((line, index) => {
+            if (index === 0) {
+                html += `<div class="credit-first-line">${escapeHtml(line)}</div>`;
+            } else {
+                html += `<div class="credit-line">${escapeHtml(line)}</div>`;
+            }
+        });
+
+        await animateContent(html);
+    }
+
+    // ====================================================
+    // スクロール制御ユーティリティ
+    // ====================================================
+    function animateContent(innerHtml) {
+        return new Promise((resolve) => {
+            // 前のアニメーションを完全リセット
+            scrollContent.classList.remove('animating');
+            scrollContent.style.animationDuration = '0s';
+            scrollContent.innerHTML = innerHtml;
+
+            // DOM更新確定後に計算・アニメーション付与を行う
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const lineElements = scrollContent.querySelectorAll('.row-item, .section-header, .title-large, .credit-line, .credit-first-line');
+                    const lineCount = Math.max(lineElements.length, 5);
+
+                    // 速度倍率を反映して再生時間を決定
+                    const durationSeconds = (lineCount * SECONDS_PER_LINE) / speedMultiplier;
+
+                    scrollContent.style.animationDuration = `${durationSeconds}s`;
+                    scrollContent.classList.add('animating');
+
+                    if (isPaused) {
+                        scrollContent.classList.add('paused');
+                    } else {
+                        scrollContent.classList.remove('paused');
+                    }
+
+                    const handleAnimationEnd = () => {
+                        scrollContent.removeEventListener('animationend', handleAnimationEnd);
+                        resolve();
+                    };
+                    scrollContent.addEventListener('animationend', handleAnimationEnd);
+                });
+            });
+        });
+    }
+
+    // 速度インジケーター更新処理
+    function updateSpeedDisplay() {
+        if (Math.abs(speedMultiplier - 1.0) < 0.01) {
+            speedIndicator.style.display = 'none';
+        } else {
+            speedIndicator.style.display = 'block';
+            speedIndicator.textContent = `速度: ${speedMultiplier.toFixed(1)}x`;
+        }
+    }
+
+    // XSS対策用エスケープ関数
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    // ====================================================
+    // キー操作イベント設定（スペース: 一時停止, 上下: 速度変更）
+    // ====================================================
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' || e.key === ' ') {
+            e.preventDefault();
+            isPaused = !isPaused;
+            if (isPaused) {
+                scrollContent.classList.add('paused');
+            } else {
+                scrollContent.classList.remove('paused');
+            }
+        } else if (e.code === 'ArrowUp') {
+            e.preventDefault();
+            speedMultiplier = Math.min(speedMultiplier + 0.2, 5.0); // 最大5倍
+            updateSpeedDisplay();
+            updateCurrentAnimationSpeed();
+        } else if (e.code === 'ArrowDown') {
+            e.preventDefault();
+            speedMultiplier = Math.max(speedMultiplier - 0.2, 0.2); // 最小0.2倍
+            updateSpeedDisplay();
+            updateCurrentAnimationSpeed();
+        }
+    });
+
+    // 実行中のアニメーション速度をリアルタイムに書き換える処理
+    function updateCurrentAnimationSpeed() {
+        if (!scrollContent.classList.contains('animating')) return;
+
+        const lineElements = scrollContent.querySelectorAll('.row-item, .section-header, .title-large, .credit-line, .credit-first-line');
+        const lineCount = Math.max(lineElements.length, 5);
+        const newDuration = (lineCount * SECONDS_PER_LINE) / speedMultiplier;
+        scrollContent.style.animationDuration = `${newDuration}s`;
+    }
+
+    // 画面ロード時にループスタート
+    window.addEventListener('DOMContentLoaded', startDisplayLoop);
+</script>
+
+</body>
+</html>
