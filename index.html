@@ -55,6 +55,17 @@
             display: block;
         }
 
+        .not-logged-in-msg {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #d90429;
+            background: #ffe5e8;
+            padding: 15px 20px;
+            border-radius: var(--border-radius);
+            border: 2px solid #ff4d6d;
+            display: inline-block;
+        }
+
         /* --- モードセクション --- */
         .mode-section {
             margin-bottom: 35px;
@@ -131,6 +142,11 @@
         .badge-play {
             background: #dcfce7;
             color: #15803d;
+        }
+
+        .badge-creator {
+            background: #f3e8ff;
+            color: #6b21a8;
         }
 
         .badge-disabled {
@@ -334,10 +350,27 @@
             cursor: pointer;
             font-weight: bold;
             transition: background 0.2s;
+            margin-bottom: 10px;
         }
 
         .add-mode-btn:hover {
             background: #cbd5e1;
+        }
+
+        .add-creator-btn {
+            width: 100%;
+            padding: 12px;
+            background: #64748b;
+            color: #ffffff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .add-creator-btn:hover {
+            background: #475569;
         }
 
         /* ロゴサイズスライダー */
@@ -436,6 +469,7 @@
             <h3>クイズモードの管理・編集</h3>
             <div id="modeEditList"></div>
             <button class="add-mode-btn" id="addModeBtn">＋ 新しいモードを追加</button>
+            <button class="add-creator-btn" id="addCreatorBtn">＋ 製作者用機能の追加</button>
         </div>
 
         <div style="text-align: right; margin-top: 20px;">
@@ -457,6 +491,7 @@ const INDEX_RECORD_ID = 'portal_config';
 const defaultModes = [
     {
         id: "five-league",
+        type: "quiz",
         title: "ファイブリーグ",
         color: "#00b4d8",
         createUrl: "ファイブリーグ問題制作用ver1.6.2.html",
@@ -464,6 +499,7 @@ const defaultModes = [
     },
     {
         id: "torocco",
+        type: "quiz",
         title: "トロッコアドベンチャー",
         color: "#e67e22",
         createUrl: "トロッコアドベンチャー問題制作用.html",
@@ -471,6 +507,7 @@ const defaultModes = [
     },
     {
         id: "percent-balloon",
+        type: "quiz",
         title: "パーセントバルーン",
         color: "#e74c3c",
         createUrl: "",
@@ -489,10 +526,9 @@ let currentUser = null;
 // --- 初期化処理 ---
 window.addEventListener('DOMContentLoaded', async () => {
     loadSettingsFromLocal();
-    loadLogo();
+    await checkLoginStatus();
     renderHome();
     setupEventListeners();
-    await checkLoginStatus();
 });
 
 // --- Supabase 認証＆同期処理 ---
@@ -504,8 +540,9 @@ async function checkLoginStatus() {
     renderAuthUI();
 
     if (currentUser) {
-        // ログイン済みの場合、Supabaseから index_data を同期読み込み
         await fetchIndexDataFromSupabase();
+    } else {
+        renderHeader();
     }
 }
 
@@ -571,6 +608,7 @@ async function logoutFromSupabase() {
     currentUser = null;
     alert("ログアウトしました。");
     renderAuthUI();
+    renderHeader();
 }
 
 // Supabase から index_data を取得
@@ -597,15 +635,15 @@ async function fetchIndexDataFromSupabase(isManual = false) {
             if (cloudConfig.logoSize) logoSize = cloudConfig.logoSize;
 
             saveSettingsToLocal();
+            renderHeader();
             renderHome();
-            applyLogoSize(logoSize);
             updateLogoSizeUI(logoSize);
             document.getElementById('playOnlyToggle').checked = isPlayOnly;
 
             if (isManual) alert("クラウドから最新のポータル設定を取得しました！");
         } else {
-            // クラウドにまだレコードが無い場合は現在のローカル設定を書き込み保存
             await syncIndexDataToSupabase();
+            renderHeader();
         }
     } catch (e) {
         console.error("取得例外:", e);
@@ -667,6 +705,7 @@ async function saveSettings() {
     if (currentUser) {
         await syncIndexDataToSupabase();
     }
+    renderHeader();
     renderHome();
     document.getElementById('settingsModal').style.display = 'none';
 }
@@ -714,7 +753,6 @@ function uploadIndexDataJson(e) {
             let addedCount = 0;
             let skippedCount = 0;
 
-            // 1. モードのマージ（同じタイトルのものがない場合のみ追加）
             if (imported.modes && Array.isArray(imported.modes)) {
                 imported.modes.forEach(impMode => {
                     if (!impMode.title) return;
@@ -729,7 +767,6 @@ function uploadIndexDataJson(e) {
                 });
             }
 
-            // 2. その他の設定値は上書き更新
             if (typeof imported.isPlayOnly === 'boolean') {
                 isPlayOnly = imported.isPlayOnly;
                 document.getElementById('playOnlyToggle').checked = isPlayOnly;
@@ -741,7 +778,6 @@ function uploadIndexDataJson(e) {
                 updateLogoSizeUI(logoSize);
             }
 
-            // 画面反映・編集リスト更新
             renderSettingsEditList();
             
             alert(`JSONの読み込みが完了しました！\n・追加された新モード: ${addedCount}件\n・重複のためスキップ: ${skippedCount}件\n\n「設定を保存して閉じる」を押すと変更が保存・同期されます。`);
@@ -749,13 +785,21 @@ function uploadIndexDataJson(e) {
             alert("JSONファイルの読み込みに失敗しました。ファイル形式を確認してください。");
             console.error(err);
         } finally {
-            e.target.value = ''; // 入力をリセット
+            e.target.value = '';
         }
     };
     reader.readAsText(file);
 }
 
-// --- ロゴ・画面描画ユーティリティ ---
+// --- ヘッダー（ロゴ/未ログイン表示）の描画 ---
+function renderHeader() {
+    const logoContainer = document.getElementById('logoContainer');
+    if (!currentUser) {
+        logoContainer.innerHTML = '<div class="not-logged-in-msg">ログインしていません。左下設定画面からログインしてください。</div>';
+    } else {
+        loadLogo();
+    }
+}
 
 function loadLogo() {
     const logoContainer = document.getElementById('logoContainer');
@@ -782,10 +826,9 @@ function applyLogoSize(percent) {
     const logoContainer = document.getElementById('logoContainer');
     const img = logoContainer.querySelector('img');
     
-    const baseHeight = 240;
-    const targetHeight = Math.round((baseHeight * percent) / 100);
-
     if (img) {
+        const baseHeight = 240;
+        const targetHeight = Math.round((baseHeight * percent) / 100);
         img.style.maxHeight = `${targetHeight}px`;
     }
 }
@@ -800,6 +843,13 @@ function renderHome() {
     container.innerHTML = '';
 
     modes.forEach(mode => {
+        const isCreatorMode = mode.type === 'creator' || (mode.id && mode.id.startsWith('creator-'));
+        
+        // 回答専用モードの時は製作者用機能を非表示にする
+        if (isPlayOnly && isCreatorMode) {
+            return;
+        }
+
         const section = document.createElement('section');
         section.className = 'mode-section';
 
@@ -815,27 +865,41 @@ function renderHome() {
         const grid = document.createElement('div');
         grid.className = 'grid';
 
-        if (!isPlayOnly) {
-            const createCard = createCardElement(
-                `${mode.title} 問題制作`,
-                '問題データの追加・編集・JSON出力',
-                '制作ツール',
-                'badge-create',
-                mode.createUrl,
+        if (isCreatorMode) {
+            // 製作者用機能（区分なし・1つのカード）
+            const creatorCard = createCardElement(
+                `${mode.title} ツール`,
+                '製作者用機能を開きます',
+                '製作者用',
+                'badge-creator',
+                mode.url || mode.createUrl || mode.playUrl,
                 themeColor
             );
-            grid.appendChild(createCard);
-        }
+            grid.appendChild(creatorCard);
+        } else {
+            // 通常のクイズモード
+            if (!isPlayOnly) {
+                const createCard = createCardElement(
+                    `${mode.title} 問題制作`,
+                    '問題データの追加・編集・JSON出力',
+                    '制作ツール',
+                    'badge-create',
+                    mode.createUrl,
+                    themeColor
+                );
+                grid.appendChild(createCard);
+            }
 
-        const playCard = createCardElement(
-            `${mode.title} 回答システム`,
-            '問題データを読み込んでプレイを開始',
-            '回答ツール',
-            'badge-play',
-            mode.playUrl,
-            themeColor
-        );
-        grid.appendChild(playCard);
+            const playCard = createCardElement(
+                `${mode.title} 回答システム`,
+                '問題データを読み込んでプレイを開始',
+                '回答ツール',
+                'badge-play',
+                mode.playUrl,
+                themeColor
+            );
+            grid.appendChild(playCard);
+        }
 
         section.appendChild(grid);
         container.appendChild(section);
@@ -873,33 +937,65 @@ function renderSettingsEditList() {
     listContainer.innerHTML = '';
 
     modes.forEach((mode, index) => {
+        const isCreatorMode = mode.type === 'creator' || (mode.id && mode.id.startsWith('creator-'));
         const item = document.createElement('div');
         item.className = 'mode-item-edit';
-        item.innerHTML = `
-            <div class="form-row">
-                <label>モードタイトル</label>
-                <input type="text" value="${escapeHTML(mode.title)}" onchange="updateMode(${index}, 'title', this.value)">
-            </div>
-            <div class="form-row-inline" style="margin-bottom: 10px;">
-                <div style="flex:1;">
-                    <label>テーマカラー</label>
-                    <input type="color" value="${mode.color || '#00b4d8'}" style="width:100%; height:36px; border:none; cursor:pointer;" onchange="updateMode(${index}, 'color', this.value)">
+
+        if (isCreatorMode) {
+            // 製作者用機能の編集フォーム（入力はURL/パスひとつ）
+            item.innerHTML = `
+                <div class="form-row">
+                    <label>機能タイトル (製作者用)</label>
+                    <input type="text" value="${escapeHTML(mode.title)}" onchange="updateMode(${index}, 'title', this.value)">
                 </div>
-                <div style="align-self: flex-end;">
-                    <button class="btn btn-danger" onclick="deleteMode(${index})">削除</button>
+                <div class="form-row-inline" style="margin-bottom: 10px;">
+                    <div style="flex:1;">
+                        <label>テーマカラー</label>
+                        <input type="color" value="${mode.color || '#808080'}" style="width:100%; height:36px; border:none; cursor:pointer;" onchange="updateMode(${index}, 'color', this.value)">
+                    </div>
+                    <div style="align-self: flex-end;">
+                        <button class="btn btn-danger" onclick="deleteMode(${index})">削除</button>
+                    </div>
                 </div>
-            </div>
-            <div class="form-row">
-                <label>制作用ファイル (URL / パス)</label>
-                <input type="text" value="${escapeHTML(mode.createUrl || '')}" placeholder="例: ○○問題制作用.html (空欄で準備中)" onchange="updateMode(${index}, 'createUrl', this.value)">
-            </div>
-            <div class="form-row">
-                <label>回答用ファイル (URL / パス)</label>
-                <input type="text" value="${escapeHTML(mode.playUrl || '')}" placeholder="例: ○○回答用.html (空欄で準備中)" onchange="updateMode(${index}, 'playUrl', this.value)">
-            </div>
-        `;
+                <div class="form-row">
+                    <label>ツールファイル (URL / パス)</label>
+                    <input type="text" value="${escapeHTML(mode.url || mode.createUrl || mode.playUrl || '')}" placeholder="例: 製作者用ツール.html (空欄で準備中)" onchange="updateMode(${index}, 'url', this.value)">
+                </div>
+            `;
+        } else {
+            // 通常クイズモードの編集フォーム
+            item.innerHTML = `
+                <div class="form-row">
+                    <label>モードタイトル</label>
+                    <input type="text" value="${escapeHTML(mode.title)}" onchange="updateMode(${index}, 'title', this.value)">
+                </div>
+                <div class="form-row-inline" style="margin-bottom: 10px;">
+                    <div style="flex:1;">
+                        <label>テーマカラー</label>
+                        <input type="color" value="${mode.color || '#00b4d8'}" style="width:100%; height:36px; border:none; cursor:pointer;" onchange="updateMode(${index}, 'color', this.value)">
+                    </div>
+                    <div style="align-self: flex-end;">
+                        <button class="btn btn-danger" onclick="deleteMode(${index})">削除</button>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label>制作用ファイル (URL / パス)</label>
+                    <input type="text" value="${escapeHTML(mode.createUrl || '')}" placeholder="例: ○○問題制作用.html (空欄で準備中)" onchange="updateMode(${index}, 'createUrl', this.value)">
+                </div>
+                <div class="form-row">
+                    <label>回答用ファイル (URL / パス)</label>
+                    <input type="text" value="${escapeHTML(mode.playUrl || '')}" placeholder="例: ○○回答用.html (空欄で準備中)" onchange="updateMode(${index}, 'playUrl', this.value)">
+                </div>
+            `;
+        }
         listContainer.appendChild(item);
     });
+
+    // 回答専用モードの時は「製作者用機能の追加」ボタンを非表示
+    const addCreatorBtn = document.getElementById('addCreatorBtn');
+    if (addCreatorBtn) {
+        addCreatorBtn.style.display = isPlayOnly ? 'none' : 'block';
+    }
 }
 
 // --- イベント＆操作関数 ---
@@ -922,7 +1018,6 @@ function setupEventListeners() {
 
     document.getElementById('downloadJsonBtn').onclick = downloadIndexDataJson;
 
-    // JSON読み込みイベントの設定
     const fileInput = document.getElementById('jsonFileInput');
     document.getElementById('uploadJsonBtn').onclick = () => fileInput.click();
     fileInput.onchange = uploadIndexDataJson;
@@ -942,6 +1037,7 @@ function setupEventListeners() {
     document.getElementById('addModeBtn').onclick = () => {
         modes.push({
             id: 'mode-' + Date.now(),
+            type: 'quiz',
             title: '新しいモード',
             color: '#2b2d42',
             createUrl: '',
@@ -950,8 +1046,20 @@ function setupEventListeners() {
         renderSettingsEditList();
     };
 
+    document.getElementById('addCreatorBtn').onclick = () => {
+        modes.push({
+            id: 'creator-' + Date.now(),
+            type: 'creator',
+            title: '製作者用機能',
+            color: '#808080',
+            url: ''
+        });
+        renderSettingsEditList();
+    };
+
     document.getElementById('playOnlyToggle').onchange = (e) => {
         isPlayOnly = e.target.checked;
+        renderSettingsEditList();
     };
 
     document.getElementById('saveSettingsBtn').onclick = saveSettings;
@@ -959,6 +1067,10 @@ function setupEventListeners() {
 
 window.updateMode = function(index, key, value) {
     modes[index][key] = value;
+    if (key === 'url') {
+        modes[index]['createUrl'] = value;
+        modes[index]['playUrl'] = value;
+    }
 };
 
 window.deleteMode = function(index) {
