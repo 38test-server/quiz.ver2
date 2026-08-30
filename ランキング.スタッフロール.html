@@ -141,6 +141,15 @@
             width: 100%;
         }
 
+        /* クレジット最後のロゴ画像用スタイル */
+        .credit-logo {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            margin-top: 40px;
+            display: block;
+        }
+
         /* ----------------------------------------------------
            CSS アニメーション定義（下から上への低速スクロール）
         ---------------------------------------------------- */
@@ -339,6 +348,10 @@
             }
         });
 
+        // スタッフロールの最後に指定ロゴ画像を追加
+        const logoUrl = 'https://vnnuqbndesdemwacneqf.supabase.co/storage/v1/object/sign/Required%20Materials/logo.png?token=eyJraWQiOiI3ZDI5NWIzNC05YTlhLTQyYjMtOWYzMy03NzU2YTA2YzNlYTgiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJSZXF1aXJlZCBNYXRlcmlhbHMvbG9nby5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4MDgzMDE4LCJleHAiOjE4MTk2MTkwMTh9.5BYBEiuWLqV1Ra5Pdz4LCvfUaKrJU3jwE293-_fc3sM';
+        html += `<img src="${logoUrl}" alt="Logo" class="credit-logo">`;
+
         await animateContent(html);
     }
 
@@ -355,7 +368,7 @@
             // DOM更新確定後に計算・アニメーション付与を行う
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    const lineElements = scrollContent.querySelectorAll('.row-item, .section-header, .title-large, .credit-line, .credit-first-line');
+                    const lineElements = scrollContent.querySelectorAll('.row-item, .section-header, .title-large, .credit-line, .credit-first-line, .credit-logo');
                     const lineCount = Math.max(lineElements.length, 5);
 
                     // 速度倍率を反映して再生時間を決定
@@ -414,7 +427,7 @@
             }
         } else if (e.code === 'ArrowUp') {
             e.preventDefault();
-            speedMultiplier = Math.min(speedMultiplier + 0.2, 5.0); // 最大5倍
+            speedMultiplier = Math.min(speedMultiplier + 0.2, 15.0); // 最大15倍
             updateSpeedDisplay();
             updateCurrentAnimationSpeed();
         } else if (e.code === 'ArrowDown') {
@@ -429,7 +442,7 @@
     function updateCurrentAnimationSpeed() {
         if (!scrollContent.classList.contains('animating')) return;
 
-        const lineElements = scrollContent.querySelectorAll('.row-item, .section-header, .title-large, .credit-line, .credit-first-line');
+        const lineElements = scrollContent.querySelectorAll('.row-item, .section-header, .title-large, .credit-line, .credit-first-line, .credit-logo');
         const lineCount = Math.max(lineElements.length, 5);
         const newDuration = (lineCount * SECONDS_PER_LINE) / speedMultiplier;
         scrollContent.style.animationDuration = `${newDuration}s`;
