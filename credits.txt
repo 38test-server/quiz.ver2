@@ -1,7 +1,12 @@
 制作に使用した・補助的に利用したサイト
+Chrome描画キャンパス
+github
 github pages
-supabase
-vs code
-google gemini
+google classroom
 google document
-google スプレッドシート
+google gemini
+google spreadsheet]
+smart tool
+supabase
+Ytool.net
+ラッコツール
