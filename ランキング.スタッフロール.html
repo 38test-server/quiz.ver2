@@ -135,10 +135,16 @@
             font-size: var(--header-font-size);
             color: var(--title-color);
             text-shadow: 0 0 20px rgba(250, 204, 21, 0.6), 3px 3px 6px #000;
+            margin-top: 50px;
             margin-bottom: 30px;
             border-bottom: 4px solid var(--border-color);
             padding-bottom: 15px;
             width: 100%;
+        }
+
+        /* 最初のクレジットカード見出しの上余白を調整 */
+        .credit-first-line:first-child {
+            margin-top: 0;
         }
 
         /* クレジット最後のロゴ画像用スタイル */
@@ -321,11 +327,11 @@
     }
 
     // ====================================================
-    // クレジット取得・表示関数 (credits.txt → credits2.txt → credits3.txt)
+    // クレジット取得・表示関数 (ファイルごとに独立した見出しを生成)
     // ====================================================
     async function displayCredits() {
         const creditFiles = ['credits.txt', 'credits2.txt', 'credits3.txt'];
-        let allLines = [];
+        let html = '';
 
         for (const fileName of creditFiles) {
             try {
@@ -333,28 +339,24 @@
                 if (response.ok) {
                     const text = await response.text();
                     const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-                    allLines = allLines.concat(lines);
+                    
+                    lines.forEach((line, index) => {
+                        if (index === 0) {
+                            // 各txtファイルの1行目を独立した巨大見出しにする
+                            html += `<div class="credit-first-line">${escapeHtml(line)}</div>`;
+                        } else {
+                            html += `<div class="credit-line">${escapeHtml(line)}</div>`;
+                        }
+                    });
                 } else {
-                    allLines.push(`${fileName} が見つかりません`);
+                    html += `<div class="credit-first-line">${fileName}</div>`;
+                    html += `<div class="credit-line">ファイルが見つかりません</div>`;
                 }
             } catch (e) {
-                allLines.push(`${fileName} の読み込みに失敗しました`);
+                html += `<div class="credit-first-line">${fileName}</div>`;
+                html += `<div class="credit-line">読み込みに失敗しました</div>`;
             }
         }
-
-        if (allLines.length === 0) {
-            allLines = ['クレジットデータの読み込みに失敗しました'];
-        }
-
-        // HTML構築（初行のみ巨大化）
-        let html = '';
-        allLines.forEach((line, index) => {
-            if (index === 0) {
-                html += `<div class="credit-first-line">${escapeHtml(line)}</div>`;
-            } else {
-                html += `<div class="credit-line">${escapeHtml(line)}</div>`;
-            }
-        });
 
         // スタッフロールの最後に指定ロゴ画像を追加
         const logoUrl = 'https://vnnuqbndesdemwacneqf.supabase.co/storage/v1/object/sign/Required%20Materials/logo.png?token=eyJraWQiOiI3ZDI5NWIzNC05YTlhLTQyYjMtOWYzMy03NzU2YTA2YzNlYTgiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJSZXF1aXJlZCBNYXRlcmlhbHMvbG9nby5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4MDgzMDE4LCJleHAiOjE4MTk2MTkwMTh9.5BYBEiuWLqV1Ra5Pdz4LCvfUaKrJU3jwE293-_fc3sM';
