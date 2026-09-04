@@ -321,26 +321,34 @@
     }
 
     // ====================================================
-    // クレジット取得・表示関数
+    // クレジット取得・表示関数 (credits.txt → credits2.txt → credits3.txt)
     // ====================================================
     async function displayCredits() {
-        let lines = [];
-        try {
-            // 同一フォルダ内の credits.txt を読み込み
-            const response = await fetch('credits.txt');
-            if (response.ok) {
-                const text = await response.text();
-                lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-            } else {
-                lines = ['クレジット', 'credits.txt が見つかりません'];
+        const creditFiles = ['credits.txt', 'credits2.txt', 'credits3.txt'];
+        let allLines = [];
+
+        for (const fileName of creditFiles) {
+            try {
+                const response = await fetch(fileName);
+                if (response.ok) {
+                    const text = await response.text();
+                    const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                    allLines = allLines.concat(lines);
+                } else {
+                    allLines.push(`${fileName} が見つかりません`);
+                }
+            } catch (e) {
+                allLines.push(`${fileName} の読み込みに失敗しました`);
             }
-        } catch (e) {
-            lines = ['クレジット', 'credits.txt の読み込みに失敗しました'];
+        }
+
+        if (allLines.length === 0) {
+            allLines = ['クレジットデータの読み込みに失敗しました'];
         }
 
         // HTML構築（初行のみ巨大化）
         let html = '';
-        lines.forEach((line, index) => {
+        allLines.forEach((line, index) => {
             if (index === 0) {
                 html += `<div class="credit-first-line">${escapeHtml(line)}</div>`;
             } else {
