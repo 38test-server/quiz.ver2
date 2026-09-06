@@ -929,17 +929,17 @@
                 }, 300);
             });
         } else if (currentPIdx > prevPIdx) {
-            // 右方向へ進行中
+            // 右方向へ進行中（自分とその右側のパドルを動かす）
             paddleElements.forEach((paddle, idx) => {
-                if (idx <= currentPIdx) {
+                if (idx >= currentPIdx) {
                     paddle.style.top = `${paddleY}px`;
                     paddlePositionsY[idx] = paddleY;
                 }
             });
         } else {
-            // 左方向へ進行中（復路）
+            // 左方向へ進行中（自分とその左側のパドルを動かす）
             paddleElements.forEach((paddle, idx) => {
-                if (idx >= currentPIdx) {
+                if (idx <= currentPIdx) {
                     paddle.style.top = `${paddleY}px`;
                     paddlePositionsY[idx] = paddleY;
                 }
