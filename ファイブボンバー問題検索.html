@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ファイブボンバー - GM判定サポートツール</title>
+    <!-- Supabase JS Client CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --accent-red: #dc2626;
+            --border-color: #cbd5e1;
+            --highlight-bg: #fef3c7;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: #0f172a;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: var(--accent-red);
+            border-bottom: 2px solid var(--accent-red);
+            padding-bottom: 8px;
+            margin-top: 0;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-red);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .question-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--accent-red);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            text-align: left;
+            font-size: 0.95rem;
+            vertical-align: middle;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            font-weight: bold;
+        }
+
+        .num-col {
+            width: 50px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .sub-q-col {
+            width: 40%;
+        }
+
+        .matched-row {
+            background-color: var(--highlight-bg) !important;
+            font-weight: bold;
+        }
+
+        .file-input-wrapper {
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .sub-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .sub-img-thumb {
+            max-width: 140px;
+            max-height: 90px;
+            object-fit: contain;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: #f1f5f9;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎯 GM（ゲームマスター）判定サポート</h1>
+
+    <div class="card">
+        <div class="form-group file-input-wrapper">
+            <label for="json-file">📁 問題データ（JSONファイルから手動読み込みも可能）</label>
+            <input type="file" id="json-file" accept=".json">
+            <span id="load-status" style="margin-left: 10px; font-weight: bold;">通信中...</span>
+        </div>
+
+        <div class="controls">
+            <div class="form-group">
+                <label for="select-q">1. 大問を選択</label>
+                <select id="select-q" disabled>
+                    <option value="">-- 読み込み中 --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="search-q">または キーワード・問題番号（例: Q1）で検索</label>
+                <input type="text" id="search-q" placeholder="キーワード・番号（例: 1, Q1）..." disabled>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="detail-card" style="display: none;">
+        <div class="question-title" id="display-main-q">問題文がここに表示されます</div>
+        
+        <div style="margin-bottom: 10px;">
+            <input type="text" id="search-ans" placeholder="🔍 口頭回答のリアルタイム正誤チェック（例: りんご）">
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th class="num-col">#</th>
+                    <th class="sub-q-col">お題 / 画像</th>
+                    <th>正解リスト（判定対象）</th>
+                </tr>
+            </thead>
+            <tbody id="ans-table-body">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // --- Supabase設定 ---
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    let questions = [];
+
+    const jsonFileInput = document.getElementById('json-file');
+    const loadStatus = document.getElementById('load-status');
+    const selectQ = document.getElementById('select-q');
+    const searchQ = document.getElementById('search-q');
+    const detailCard = document.getElementById('detail-card');
+    const displayMainQ = document.getElementById('display-main-q');
+    const ansTableBody = document.getElementById('ans-table-body');
+    const searchAns = document.getElementById('search-ans');
+
+    loadQuestionsFromSupabase();
+
+    async function loadQuestionsFromSupabase() {
+        let loadedData = null;
+
+        try {
+            const { data, error } = await supabaseClient
+                .from('quiz_data')
+                .select('five_bomber')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .single();
+
+            if (!error && data && data.five_bomber) {
+                let fetched = data.five_bomber;
+                if (Array.isArray(fetched)) {
+                    loadedData = fetched;
+                } else if (fetched && Array.isArray(fetched.questions)) {
+                    loadedData = fetched.questions;
+                }
+            }
+        } catch (e) {
+            console.warn('Supabaseからの読み込み失敗:', e);
+        }
+
+        if (!loadedData || loadedData.length === 0) {
+            const localStr = localStorage.getItem('five_bomber_questions');
+            if (localStr) {
+                try {
+                    const parsed = JSON.parse(localStr);
+                    if (Array.isArray(parsed)) loadedData = parsed;
+                    else if (parsed && Array.isArray(parsed.questions)) loadedData = parsed.questions;
+                } catch (e) {}
+            }
+        }
+
+        if (loadedData && loadedData.length > 0) {
+            questions = loadedData;
+            onQuestionsLoaded(`✅ ${questions.length} 問 自動読み込み完了`);
+        } else {
+            loadStatus.textContent = '⚠️ データ未検出（JSONファイルを選択してください）';
+            loadStatus.style.color = '#d97706';
+        }
+    }
+
+    function onQuestionsLoaded(statusMessage) {
+        loadStatus.textContent = statusMessage;
+        loadStatus.style.color = '#10b981';
+        selectQ.disabled = false;
+        searchQ.disabled = false;
+
+        initQuestionSelect(questions);
+    }
+
+    jsonFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const parsed = JSON.parse(event.target.result);
+                if (Array.isArray(parsed)) {
+                    questions = parsed;
+                } else if (parsed && Array.isArray(parsed.questions)) {
+                    questions = parsed.questions;
+                } else {
+                    throw new Error("フォーマットが正しくありません");
+                }
+                onQuestionsLoaded(`✅ ${questions.length} 問 読み込み完了`);
+            } catch (err) {
+                alert("JSONファイルの読み込みに失敗しました: " + err.message);
+                loadStatus.textContent = '❌ エラー';
+                loadStatus.style.color = '#dc2626';
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    function initQuestionSelect(list, autoSelectFirst = true) {
+        selectQ.innerHTML = '';
+
+        if (list.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = "";
+            opt.textContent = "-- 該当する問題がありません --";
+            selectQ.appendChild(opt);
+            detailCard.style.display = 'none';
+            return;
+        }
+
+        list.forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.originalIndex;
+            const diff = (item.q.difficulty || 'normal').toUpperCase();
+            const text = item.q.question || '';
+            opt.textContent = `[${diff}] Q${item.originalIndex + 1}. ${text.substring(0, 30)}${text.length > 30 ? '...' : ''}`;
+            selectQ.appendChild(opt);
+        });
+
+        if (autoSelectFirst || list.length === 1) {
+            selectQ.value = list[0].originalIndex;
+            renderQuestionDetail(list[0].originalIndex);
+        }
+    }
+
+    function getIndexedQuestions() {
+        return questions.map((q, idx) => ({ q, originalIndex: idx }));
+    }
+
+    function loadAllQuestions() {
+        initQuestionSelect(getIndexedQuestions(), true);
+    }
+
+    searchQ.addEventListener('input', () => {
+        const inputStr = searchQ.value.trim().toLowerCase();
+        if (!inputStr) {
+            loadAllQuestions();
+            return;
+        }
+
+        const indexed = getIndexedQuestions();
+        const numMatch = inputStr.match(/^q?(\d+)$/);
+
+        let filtered = [];
+        if (numMatch) {
+            const targetNum = parseInt(numMatch[1], 10);
+            filtered = indexed.filter(item => (item.originalIndex + 1) === targetNum);
+        }
+
+        if (filtered.length === 0) {
+            filtered = indexed.filter(item => 
+                item.q.question && item.q.question.toLowerCase().includes(inputStr)
+            );
+        }
+
+        initQuestionSelect(filtered, true);
+    });
+
+    selectQ.addEventListener('change', () => {
+        if (selectQ.value !== "") {
+            renderQuestionDetail(selectQ.value);
+        }
+    });
+
+    // 選択された問題詳細の描画処理（Base64画像自動補正を追加）
+    function renderQuestionDetail(idx) {
+        const q = questions[idx];
+        if (!q) {
+            detailCard.style.display = 'none';
+            return;
+        }
+
+        displayMainQ.textContent = `【Q${parseInt(idx) + 1}】 ${q.question}`;
+        
+        ansTableBody.innerHTML = '';
+        const answers = q.answers || [];
+
+        answers.forEach((ans, aIdx) => {
+            const tr = document.createElement('tr');
+            tr.id = `row-${aIdx}`;
+
+            const tdNum = document.createElement('td');
+            tdNum.className = 'num-col';
+            tdNum.textContent = aIdx + 1;
+            tr.appendChild(tdNum);
+
+            const tdSub = document.createElement('td');
+            tdSub.className = 'sub-q-col';
+            
+            const subContainer = document.createElement('div');
+            subContainer.className = 'sub-container';
+
+            const subText = (q.subQuestions && q.subQuestions[aIdx]) ? q.subQuestions[aIdx].trim() : '';
+            let rawImage = (q.subImages && q.subImages[aIdx]) ? q.subImages[aIdx].trim() : '';
+
+            if (subText) {
+                const textSpan = document.createElement('span');
+                textSpan.textContent = subText;
+                subContainer.appendChild(textSpan);
+            }
+
+            if (rawImage) {
+                // Base64データでヘッダー（data:image/...）が無い場合は補完する
+                let imgSrc = rawImage;
+                if (!rawImage.startsWith('http') && !rawImage.startsWith('data:')) {
+                    imgSrc = `data:image/png;base64,${rawImage}`;
+                }
+
+                const img = document.createElement('img');
+                img.src = imgSrc;
+                img.className = 'sub-img-thumb';
+                img.alt = `お題${aIdx + 1}の画像`;
+                img.onerror = () => { img.style.display = 'none'; };
+                subContainer.appendChild(img);
+            }
+
+            if (!subText && !rawImage) {
+                subContainer.textContent = '-';
+            }
+
+            tdSub.appendChild(subContainer);
+            tr.appendChild(tdSub);
+
+            const tdAns = document.createElement('td');
+            if (Array.isArray(ans)) {
+                tdAns.textContent = ans.join(' / ');
+            } else {
+                tdAns.textContent = ans;
+            }
+            tr.appendChild(tdAns);
+
+            ansTableBody.appendChild(tr);
+        });
+
+        searchAns.value = '';
+        detailCard.style.display = 'block';
+    }
+
+    searchAns.addEventListener('input', () => {
+        const val = searchAns.value.trim().toLowerCase();
+        
+        document.querySelectorAll('#ans-table-body tr').forEach(tr => {
+            tr.classList.remove('matched-row');
+        });
+
+        if (!val) return;
+
+        const idx = selectQ.value;
+        if (idx === "") return;
+
+        const answers = questions[idx].answers || [];
+        answers.forEach((ans, aIdx) => {
+            let isMatch = false;
+            if (Array.isArray(ans)) {
+                isMatch = ans.some(a => String(a).toLowerCase().includes(val));
+            } else {
+                isMatch = String(ans).toLowerCase().includes(val);
+            }
+
+            if (isMatch) {
+                const row = document.getElementById(`row-${aIdx}`);
+                if (row) row.classList.add('matched-row');
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
