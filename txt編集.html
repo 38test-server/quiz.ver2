@@ -196,7 +196,7 @@
     </div>
 
     <div class="controls">
-        <button id="replace-links-btn" class="secondary-btn">🔗 リンクをページ名に変換</button>
+        <button id="replace-links-btn" class="secondary-btn">🔗 リンクをページ名に変換 (高速化版)</button>
         <button id="process-btn">✨ 重複削除＆ソートを実行</button>
         <button id="download-btn" style="display: none;">💾 保存 (credits.txt)</button>
     </div>
@@ -227,7 +227,7 @@
         reader.readAsText(file);
     });
 
-    // 1. URLを取得してWebページのタイトルを取得・置換する機能
+    // 1. URLを取得してWebページのタイトルを取得・置換する機能（並列処理で高速化）
     replaceLinksBtn.addEventListener('click', async () => {
         const text = inputText.value;
         if (!text.trim()) {
@@ -247,26 +247,22 @@
         const uniqueUrls = Array.from(new Set(urls));
         replaceLinksBtn.disabled = true;
         processBtn.disabled = true;
-        
+        statusInfo.textContent = `${uniqueUrls.length} 件のリンク先タイトルを同時に取得中...`;
+
         let updatedText = text;
         let successCount = 0;
 
-        for (let i = 0; i < uniqueUrls.length; i++) {
-            const targetUrl = uniqueUrls[i];
-            statusInfo.textContent = `[${i + 1}/${uniqueUrls.length}] リンク先のタイトルを取得中: ${targetUrl}`;
-
+        // 個別URLのタイトル取得非同期処理
+        const fetchTitle = async (targetUrl) => {
             try {
-                // AllOriginsプロキシを経由してHTMLを取得 (CORS回避)
                 const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
                 const response = await fetch(proxyUrl);
                 
                 if (response.ok) {
                     const data = await response.json();
                     if (data.contents) {
-                        // HTMLから <title> タグの中身を抽出
                         const titleMatch = data.contents.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
                         if (titleMatch && titleMatch[1]) {
-                            // 特殊文字のエスケープ解除と余白のクリーンアップ
                             let pageTitle = titleMatch[1]
                                 .replace(/&amp;/g, '&')
                                 .replace(/&lt;/g, '<')
@@ -276,9 +272,7 @@
                                 .trim();
 
                             if (pageTitle) {
-                                // URL全体をタイトルに置換
-                                updatedText = updatedText.replaceAll(targetUrl, pageTitle);
-                                successCount++;
+                                return { url: targetUrl, title: pageTitle };
                             }
                         }
                     }
@@ -286,12 +280,24 @@
             } catch (err) {
                 console.warn(`タイトルの取得に失敗しました: ${targetUrl}`, err);
             }
-        }
+            return null;
+        };
+
+        // 全URLに対して一斉（並列）にリクエストを送信
+        const results = await Promise.all(uniqueUrls.map(url => fetchTitle(url)));
+
+        // 取得完了したタイトルで文字列を一括置換
+        results.forEach(result => {
+            if (result) {
+                updatedText = updatedText.replaceAll(result.url, result.title);
+                successCount++;
+            }
+        });
 
         inputText.value = updatedText;
         replaceLinksBtn.disabled = false;
         processBtn.disabled = false;
-        statusInfo.textContent = `変換完了: ${successCount} 件のリンクをページ名称に置き換えました。`;
+        statusInfo.textContent = `変換完了: ${successCount} / ${uniqueUrls.length} 件のリンクをページ名称に置き換えました。`;
     });
 
     // 2. 文字の種別判定用（アルファベット -> ひらがな/カタカナ -> 漢字 -> その他）
