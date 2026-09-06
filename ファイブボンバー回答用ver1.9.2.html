@@ -130,19 +130,8 @@
             box-sizing: border-box;
         }
 
-        /* ロビー（設定画面）の初期背景画像の設定 */
-        #screen-lobby {
-            max-height: 90vh;
-            overflow-y: auto;
-            background-image: url('bomber_back.png');
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            border-radius: 20px;
-        }
-
-        /* 結果画面は縦スクロール許可 */
-        #screen-result {
+        /* ロビー・結果画面は縦スクロール許可 */
+        #screen-lobby, #screen-result {
             max-height: 90vh;
             overflow-y: auto;
         }
@@ -1439,7 +1428,6 @@
     btnToLobby.addEventListener('click', () => {
         if (presentationTimer) clearTimeout(presentationTimer);
         smokeOverlay.style.display = 'none';
-        dynamicBg.style.backgroundImage = "url('bomber_back.png')";
         loadQuestions();
         showScreen('screen-lobby');
     });
@@ -1453,7 +1441,6 @@
             smokeOverlay.style.display = 'none';
             bombImg.style.display = 'none';
             paddleElements.forEach(p => p.remove());
-            dynamicBg.style.backgroundImage = "url('bomber_back.png')";
             loadQuestions();
             showScreen('screen-lobby');
         }
