@@ -244,6 +244,11 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .toggle-container:last-child {
+            margin-bottom: 0;
         }
 
         .switch {
@@ -463,6 +468,13 @@
                     <span class="slider"></span>
                 </label>
             </div>
+            <div class="toggle-container">
+                <span>パーティーモード（オンの時、対応URLがあれば優先遷移）</span>
+                <label class="switch">
+                    <input type="checkbox" id="partyModeToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
         </div>
 
         <div class="setting-group">
@@ -495,7 +507,8 @@ const defaultModes = [
         title: "ファイブリーグ",
         color: "#00b4d8",
         createUrl: "ファイブリーグ問題制作用ver1.6.2.html",
-        playUrl: "ファイブリーグ回答用ver1.6.0.html"
+        playUrl: "ファイブリーグ回答用ver1.6.0.html",
+        partyUrl: ""
     },
     {
         id: "torocco",
@@ -503,7 +516,8 @@ const defaultModes = [
         title: "トロッコアドベンチャー",
         color: "#e67e22",
         createUrl: "トロッコアドベンチャー問題制作用.html",
-        playUrl: "トロッコアドベンチャー回答用.html"
+        playUrl: "トロッコアドベンチャー回答用.html",
+        partyUrl: ""
     },
     {
         id: "percent-balloon",
@@ -511,7 +525,8 @@ const defaultModes = [
         title: "パーセントバルーン",
         color: "#e74c3c",
         createUrl: "",
-        playUrl: ""
+        playUrl: "",
+        partyUrl: ""
     }
 ];
 
@@ -520,6 +535,7 @@ const DEFAULT_LOGO_SIZE = 100;
 // --- 状態管理 ---
 let modes = [];
 let isPlayOnly = false;
+let isPartyMode = false;
 let logoSize = DEFAULT_LOGO_SIZE;
 let currentUser = null;
 
@@ -632,6 +648,7 @@ async function fetchIndexDataFromSupabase(isManual = false) {
             const cloudConfig = data.index_data;
             if (cloudConfig.modes) modes = cloudConfig.modes;
             if (typeof cloudConfig.isPlayOnly === 'boolean') isPlayOnly = cloudConfig.isPlayOnly;
+            if (typeof cloudConfig.isPartyMode === 'boolean') isPartyMode = cloudConfig.isPartyMode;
             if (cloudConfig.logoSize) logoSize = cloudConfig.logoSize;
 
             saveSettingsToLocal();
@@ -639,6 +656,7 @@ async function fetchIndexDataFromSupabase(isManual = false) {
             renderHome();
             updateLogoSizeUI(logoSize);
             document.getElementById('playOnlyToggle').checked = isPlayOnly;
+            document.getElementById('partyModeToggle').checked = isPartyMode;
 
             if (isManual) alert("クラウドから最新のポータル設定を取得しました！");
         } else {
@@ -660,6 +678,7 @@ async function syncIndexDataToSupabase() {
         index_data: {
             modes: modes,
             isPlayOnly: isPlayOnly,
+            isPartyMode: isPartyMode,
             logoSize: logoSize,
             updatedAt: new Date().toISOString()
         }
@@ -682,19 +701,23 @@ async function syncIndexDataToSupabase() {
 function loadSettingsFromLocal() {
     const savedModes = localStorage.getItem('quiz_portal_modes');
     const savedPlayOnly = localStorage.getItem('quiz_portal_play_only');
+    const savedPartyMode = localStorage.getItem('quiz_portal_party_mode');
     const savedLogoSize = localStorage.getItem('quiz_portal_logo_size');
 
     modes = savedModes ? JSON.parse(savedModes) : defaultModes;
     isPlayOnly = savedPlayOnly ? JSON.parse(savedPlayOnly) : false;
+    isPartyMode = savedPartyMode ? JSON.parse(savedPartyMode) : false;
     logoSize = savedLogoSize ? parseInt(savedLogoSize, 10) : DEFAULT_LOGO_SIZE;
 
     document.getElementById('playOnlyToggle').checked = isPlayOnly;
+    document.getElementById('partyModeToggle').checked = isPartyMode;
     updateLogoSizeUI(logoSize);
 }
 
 function saveSettingsToLocal() {
     localStorage.setItem('quiz_portal_modes', JSON.stringify(modes));
     localStorage.setItem('quiz_portal_play_only', JSON.stringify(isPlayOnly));
+    localStorage.setItem('quiz_portal_party_mode', JSON.stringify(isPartyMode));
     localStorage.setItem('quiz_portal_logo_size', logoSize.toString());
 }
 
@@ -723,6 +746,7 @@ function downloadIndexDataJson() {
     const indexDataObj = {
         modes: modes,
         isPlayOnly: isPlayOnly,
+        isPartyMode: isPartyMode,
         logoSize: logoSize,
         exportedAt: now.toISOString()
     };
@@ -770,6 +794,11 @@ function uploadIndexDataJson(e) {
             if (typeof imported.isPlayOnly === 'boolean') {
                 isPlayOnly = imported.isPlayOnly;
                 document.getElementById('playOnlyToggle').checked = isPlayOnly;
+            }
+
+            if (typeof imported.isPartyMode === 'boolean') {
+                isPartyMode = imported.isPartyMode;
+                document.getElementById('partyModeToggle').checked = isPartyMode;
             }
 
             if (imported.logoSize && typeof imported.logoSize === 'number') {
@@ -890,12 +919,18 @@ function renderHome() {
                 grid.appendChild(createCard);
             }
 
+            // パーティーモード設定がオンかつ partyUrl が入力されている場合はそれを優先指定
+            let targetPlayUrl = mode.playUrl;
+            if (isPartyMode && mode.partyUrl && mode.partyUrl.trim() !== "") {
+                targetPlayUrl = mode.partyUrl;
+            }
+
             const playCard = createCardElement(
                 `${mode.title} 回答システム`,
                 '問題データを読み込んでプレイを開始',
                 '回答ツール',
                 'badge-play',
-                mode.playUrl,
+                targetPlayUrl,
                 themeColor
             );
             grid.appendChild(playCard);
@@ -986,6 +1021,10 @@ function renderSettingsEditList() {
                     <label>回答用ファイル (URL / パス)</label>
                     <input type="text" value="${escapeHTML(mode.playUrl || '')}" placeholder="例: ○○回答用.html (空欄で準備中)" onchange="updateMode(${index}, 'playUrl', this.value)">
                 </div>
+                <div class="form-row">
+                    <label>パーティーモード用回答ファイル (URL / パス)</label>
+                    <input type="text" value="${escapeHTML(mode.partyUrl || '')}" placeholder="例: ○○回答用_パーティー.html (空欄の場合は通常の回答用を使用)" onchange="updateMode(${index}, 'partyUrl', this.value)">
+                </div>
             `;
         }
         listContainer.appendChild(item);
@@ -1041,7 +1080,8 @@ function setupEventListeners() {
             title: '新しいモード',
             color: '#2b2d42',
             createUrl: '',
-            playUrl: ''
+            playUrl: '',
+            partyUrl: ''
         });
         renderSettingsEditList();
     };
@@ -1059,6 +1099,11 @@ function setupEventListeners() {
 
     document.getElementById('playOnlyToggle').onchange = (e) => {
         isPlayOnly = e.target.checked;
+        renderSettingsEditList();
+    };
+
+    document.getElementById('partyModeToggle').onchange = (e) => {
+        isPartyMode = e.target.checked;
         renderSettingsEditList();
     };
 
