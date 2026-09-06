@@ -462,11 +462,11 @@
 
     <!-- 爆弾＆パドル演出用ステージ -->
     <div id="game-stage">
-        <img id="bomb-img" src="bom.png" alt="爆弾" style="display: none;">
+        <img id="bomb-img" src="assets/bom.png" alt="爆弾" style="display: none;">
     </div>
 
     <!-- ゲームオーバー時煙エフェクト -->
-    <img id="smoke-overlay" src="smoke.png" alt="スモーク">
+    <img id="smoke-overlay" src="assets/smoke.png" alt="スモーク">
 
     <!-- 1. ロビー画面 -->
     <div id="screen-lobby" class="screen active">
@@ -867,7 +867,7 @@
         activeBarIndices.forEach((barIdx) => {
             const xPos = (BAR_POSITIONS_1920[barIdx] / 1920) * screenWidth;
             const paddle = document.createElement('img');
-            paddle.src = 'paddle.png';
+            paddle.src = 'assets/paddle.png';
             paddle.className = 'paddle-img';
             paddle.style.left = `${xPos}px`;
             paddle.style.top = `180px`; // 初期Y座標を180pxに設定
@@ -960,7 +960,7 @@
         selectedSubIndex = null;
         solvedSubIndices = [];
 
-        dynamicBg.style.backgroundImage = `url('bomber_back${totalPlayers}.png')`;
+        dynamicBg.style.backgroundImage = `url('assets/bomber_back${totalPlayers}.png')`;
         smokeOverlay.style.display = 'none';
 
         setupPlayScreen();
