@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>credits.txt 編集＆整理ツール</title>
+    <style>
+        :root {
+            --bg-color: #0c4a6e;
+            --panel-bg: rgba(255, 255, 255, 0.1);
+            --text-color: #ffffff;
+            --accent-color: #facc15;
+            --btn-bg: #0284c7;
+            --btn-hover: #0369a1;
+            --border-color: #38bdf8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'BIZ UDPゴシック', sans-serif;
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, var(--bg-color) 100%);
+            color: var(--text-color);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 950px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: var(--accent-color);
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .file-area {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-btn {
+            background-color: var(--btn-bg);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+
+        .file-btn:hover {
+            background-color: var(--btn-hover);
+        }
+
+        .editor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 650px) {
+            .editor-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .editor-box {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: bold;
+            color: var(--border-color);
+        }
+
+        textarea {
+            width: 100%;
+            height: 350px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: #fff;
+            padding: 12px;
+            font-size: 15px;
+            line-height: 1.5;
+            resize: vertical;
+            font-family: monospace;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: #000;
+            font-weight: bold;
+            font-size: 15px;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+        }
+
+        button:hover {
+            background-color: #fde047;
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .secondary-btn {
+            background-color: var(--btn-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+        }
+
+        .secondary-btn:hover {
+            background-color: var(--btn-hover);
+        }
+
+        .info {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #e0f2fe;
+            text-align: center;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>credits.txt 編集＆整理ツール</h1>
+
+    <div class="file-area">
+        <label for="file-input" class="file-btn">📁 ファイルを選択</label>
+        <input type="file" id="file-input" accept=".txt">
+        <span id="file-name">選択されていません</span>
+    </div>
+
+    <div class="editor-grid">
+        <div class="editor-box">
+            <label for="input-text">編集前（URL・文字列入力可能）:</label>
+            <textarea id="input-text" placeholder="ここにテキストやURLを入力、またはファイルを選択..."></textarea>
+        </div>
+        <div class="editor-box">
+            <label for="output-text">処理結果:</label>
+            <textarea id="output-text" readonly placeholder="処理結果がここに表示されます..."></textarea>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="replace-links-btn" class="secondary-btn">🔗 リンクをページ名に変換</button>
+        <button id="process-btn">✨ 重複削除＆ソートを実行</button>
+        <button id="download-btn" style="display: none;">💾 保存 (credits.txt)</button>
+    </div>
+
+    <div class="info" id="status-info"></div>
+</div>
+
+<script>
+    const fileInput = document.getElementById('file-input');
+    const fileNameDisplay = document.getElementById('file-name');
+    const inputText = document.getElementById('input-text');
+    const outputText = document.getElementById('output-text');
+    const replaceLinksBtn = document.getElementById('replace-links-btn');
+    const processBtn = document.getElementById('process-btn');
+    const downloadBtn = document.getElementById('download-btn');
+    const statusInfo = document.getElementById('status-info');
+
+    // ファイル読み込み
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        fileNameDisplay.textContent = file.name;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            inputText.value = event.target.result;
+        };
+        reader.readAsText(file);
+    });
+
+    // 1. URLを取得してWebページのタイトルを取得・置換する機能
+    replaceLinksBtn.addEventListener('click', async () => {
+        const text = inputText.value;
+        if (!text.trim()) {
+            alert('テキストまたはURLを入力してください。');
+            return;
+        }
+
+        // URL抽出用の正規表現
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const urls = text.match(urlRegex);
+
+        if (!urls || urls.length === 0) {
+            alert('変換対象のURL（http:// または https://）が見つかりませんでした。');
+            return;
+        }
+
+        const uniqueUrls = Array.from(new Set(urls));
+        replaceLinksBtn.disabled = true;
+        processBtn.disabled = true;
+        
+        let updatedText = text;
+        let successCount = 0;
+
+        for (let i = 0; i < uniqueUrls.length; i++) {
+            const targetUrl = uniqueUrls[i];
+            statusInfo.textContent = `[${i + 1}/${uniqueUrls.length}] リンク先のタイトルを取得中: ${targetUrl}`;
+
+            try {
+                // AllOriginsプロキシを経由してHTMLを取得 (CORS回避)
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+                const response = await fetch(proxyUrl);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.contents) {
+                        // HTMLから <title> タグの中身を抽出
+                        const titleMatch = data.contents.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+                        if (titleMatch && titleMatch[1]) {
+                            // 特殊文字のエスケープ解除と余白のクリーンアップ
+                            let pageTitle = titleMatch[1]
+                                .replace(/&amp;/g, '&')
+                                .replace(/&lt;/g, '<')
+                                .replace(/&gt;/g, '>')
+                                .replace(/&quot;/g, '"')
+                                .replace(/&#039;/g, "'")
+                                .trim();
+
+                            if (pageTitle) {
+                                // URL全体をタイトルに置換
+                                updatedText = updatedText.replaceAll(targetUrl, pageTitle);
+                                successCount++;
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn(`タイトルの取得に失敗しました: ${targetUrl}`, err);
+            }
+        }
+
+        inputText.value = updatedText;
+        replaceLinksBtn.disabled = false;
+        processBtn.disabled = false;
+        statusInfo.textContent = `変換完了: ${successCount} 件のリンクをページ名称に置き換えました。`;
+    });
+
+    // 2. 文字の種別判定用（アルファベット -> ひらがな/カタカナ -> 漢字 -> その他）
+    function getCharCategory(str) {
+        if (!str || str.length === 0) return 4;
+        const firstChar = str.trim().charAt(0);
+
+        // 半角・全角アルファベット・数字
+        if (/^[a-zA-Z0-9a-zA-Z0-9]/.test(firstChar)) {
+            return 1;
+        }
+        // ひらがな・カタカナ
+        if (/^[\u3040-\u309F\u30A0-\u30FF]/.test(firstChar)) {
+            return 2;
+        }
+        // 漢字（CJK統合漢字領域）
+        if (/^[\u4E00-\u9FFF]/.test(firstChar)) {
+            return 3;
+        }
+        // 記号などその他
+        return 4;
+    }
+
+    // 3. 重複削除 ＆ ソート処理
+    processBtn.addEventListener('click', () => {
+        const rawText = inputText.value;
+        if (!rawText.trim()) {
+            alert('テキストを入力するかファイルを選択してください。');
+            return;
+        }
+
+        // 行ごとに分割して空白除去（空行は除く）
+        const lines = rawText.split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+
+        // 重複削除 (Set)
+        const uniqueLines = Array.from(new Set(lines));
+
+        // カスタムソート (英数字 -> かな -> 漢字 -> その他)
+        uniqueLines.sort((a, b) => {
+            const catA = getCharCategory(a);
+            const catB = getCharCategory(b);
+
+            if (catA !== catB) {
+                return catA - catB;
+            }
+            return a.localeCompare(b, 'ja');
+        });
+
+        const resultText = uniqueLines.join('\n');
+        outputText.value = resultText;
+
+        const removedCount = lines.length - uniqueLines.length;
+        statusInfo.textContent = `元の行数: ${lines.length} 行 ｜ 重複削除: ${removedCount} 件 ｜ 最終結果: ${uniqueLines.length} 行`;
+
+        downloadBtn.style.display = 'inline-block';
+    });
+
+    // 4. テキスト保存（ダウンロード）
+    downloadBtn.addEventListener('click', () => {
+        const text = outputText.value;
+        if (!text) return;
+
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'credits.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+</script>
+
+</body>
+</html>
