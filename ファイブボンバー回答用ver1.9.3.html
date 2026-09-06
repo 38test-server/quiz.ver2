@@ -442,6 +442,13 @@
         .ranking-tab.active { background-color: var(--gold-border); color: #000; font-weight: bold; }
         .ranking-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; font-size: 1.1rem; }
         .ranking-item { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        /* 自分の順位強調用スタイル */
+        .ranking-item.my-score {
+            background-color: rgba(239, 68, 68, 0.35);
+            border: 1px solid var(--danger-color);
+            border-radius: 6px;
+        }
 
         .result-buttons { display: flex; gap: 15px; }
         .result-buttons .btn { flex: 1; }
@@ -694,6 +701,7 @@
 
     let cachedTodayRanking = [];
     let cachedOverallRanking = [];
+    let latestPlayedRecord = null; // 直近プレイ結果保存用
 
     // DOM要素
     const container = document.getElementById('game-container');
@@ -1280,6 +1288,9 @@
 
         const timeTaken = parseFloat((maxTimeLimit - remainingTime).toFixed(1));
 
+        // 今回のプレイ結果を保持
+        latestPlayedRecord = { score: calculatedScore, time: timeTaken };
+
         if (isClear) {
             resultStatus.textContent = "GAME CLEAR!!";
             resultStatus.className = "result-title result-clear";
@@ -1396,9 +1407,21 @@
             return;
         }
 
+        let isMyRecordHighlighted = false;
+
         items.forEach((item, index) => {
             const li = document.createElement('li');
-            li.className = 'ranking-item';
+            
+            // 自分の今回プレイ記録と一致する場合は赤みがかったハイライトを付与
+            let isCurrentPlayer = false;
+            if (latestPlayedRecord && !isMyRecordHighlighted &&
+                item.five_bomber === latestPlayedRecord.score && 
+                item.five_bomber_time === latestPlayedRecord.time) {
+                isCurrentPlayer = true;
+                isMyRecordHighlighted = true; // 同スコア・同タイムの重複強調を防止
+            }
+
+            li.className = `ranking-item${isCurrentPlayer ? ' my-score' : ''}`;
 
             let medal = `${index + 1}位`;
             if (index === 0) medal = '🥇 1位';
