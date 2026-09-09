@@ -456,7 +456,7 @@
         <h2>登録問題一覧 <span id="questionCount" style="font-size: 1rem; color: #666; font-weight: normal;">0 件</span></h2>
         
         <div class="form-group" style="margin-bottom: 15px;">
-            <input type="text" id="searchInput" placeholder="🔍 問題文、回答、別解から検索..." oninput="renderQuestionList()">
+            <input type="text" id="searchInput" placeholder="🔍 問題番号、問題文、回答、別解から検索..." oninput="renderQuestionList()">
         </div>
 
         <div id="questionList"></div>
@@ -1034,6 +1034,15 @@ async function saveToSupabase() {
         let filteredQuestions = questions.filter(q => {
             if (!keyword) return true;
 
+            // 全角数字を半角数字に変換して比較用数値文字列を準備
+            const normalizedKeyword = toHalfWidth(keyword).replace(/[^0-9]/g, '');
+
+            const originalIndex = questions.indexOf(q);
+            const questionNum = (originalIndex + 1).toString(); // 登録順（1ベースの数字）
+
+            // 数字のみで一致するかチェック（「1」「第1問」「no.1」等に対応）
+            const matchesNumber = normalizedKeyword !== '' && questionNum === normalizedKeyword;
+
             const qText = (q.questionText || '').toLowerCase();
             const mAns = (q.mainAnswer || '').toLowerCase();
             
@@ -1055,7 +1064,8 @@ async function saveToSupabase() {
                 altFuriStr = q.altFuriganas.map(af => Array.isArray(af) ? af.join('') : af).join(' ').toLowerCase();
             }
 
-            return qText.includes(keyword) || 
+            return matchesNumber ||
+                   qText.includes(keyword) || 
                    mAns.includes(keyword) || 
                    furiStr.includes(keyword) || 
                    altAnsStr.includes(keyword) || 
