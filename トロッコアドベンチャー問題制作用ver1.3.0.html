@@ -469,9 +469,6 @@
     const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // ★管理者（あなた）のメールアドレスを設定してください
-    const ADMIN_EMAIL = 's50251050@hiroshima-u.ed.jp'; 
-
     // レコード識別用ID (quiz_data テーブル内での行ID)
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
 
@@ -484,6 +481,28 @@
 
     // 認証ユーザー状態
     let currentUser = null;
+    let isUserAdmin = false;
+
+    // 管理者判定関数 (admin_users テーブルを参照)
+    async function checkIsAdmin(user) {
+      if (!user) return false;
+      try {
+        const { data, error } = await supabaseClient
+          .from('admin_users')
+          .select('user_id, email')
+          .or(`user_id.eq.${user.id},email.eq.${user.email}`);
+
+        if (error) {
+          console.error('管理者判定エラー:', error);
+          return false;
+        }
+
+        return data && data.length > 0;
+      } catch (err) {
+        console.error(err);
+        return false;
+      }
+    }
 
     // 初期化
     window.addEventListener('DOMContentLoaded', async () => {
@@ -493,13 +512,14 @@
       // Supabaseの認証状態の変化（ページロード時のセッション復元含む）を監視
       supabaseClient.auth.onAuthStateChange(async (event, session) => {
         currentUser = session ? session.user : null;
-        renderAuthUI();
-
         if (currentUser) {
+          isUserAdmin = await checkIsAdmin(currentUser);
           await fetchQuestionsFromSupabase();
         } else {
+          isUserAdmin = false;
           renderQuestions();
         }
+        renderAuthUI();
       });
     });
 
@@ -509,9 +529,8 @@
       if (!container) return;
 
       if (currentUser) {
-        const isAdmin = currentUser.email === ADMIN_EMAIL;
         container.innerHTML = `
-          <div class="auth-badge status-online">🟢 ログイン中 (${escapeHTML(currentUser.email)}${isAdmin ? ' / 管理者' : ''})</div>
+          <div class="auth-badge status-online">🟢 ログイン中 (${escapeHTML(currentUser.email)}${isUserAdmin ? ' / 管理者' : ''})</div>
           <p style="font-size:0.85rem; color:var(--text-sub); margin-bottom:10px;">クラウド同期が有効です。問題の閲覧・追加・編集が可能です。</p>
           <button class="btn btn-secondary" onclick="logoutFromSupabase()">ログアウト</button>
         `;
@@ -812,7 +831,7 @@
 
         // 削除ボタン権限判定（管理者または制作者本人のみ）
         const canDelete = currentUser && (
-          currentUser.email === ADMIN_EMAIL ||
+          isUserAdmin ||
           (q.created_by && q.created_by === currentUser.id)
         );
 
