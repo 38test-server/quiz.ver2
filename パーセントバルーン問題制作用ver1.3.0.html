@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>パーセントバルーン クイズ問題制作ツール ver1.2.2</title>
+    <title>パーセントバルーン クイズ問題制作ツール</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
@@ -189,7 +189,7 @@
 <body>
 
 <div class="container">
-    <h1>🎈 パーセントバルーン クイズ問題制作ツール ver1.2.2</h1>
+    <h1>🎈 パーセントバルーン クイズ問題制作ツール</h1>
     <hr style="margin-bottom: 20px;">
 
     <div class="card">
@@ -274,9 +274,6 @@
     const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // ★管理者（あなた）のメールアドレスを設定
-    const ADMIN_EMAIL = 's50251050@hiroshima-u.ed.jp'; 
-
     // quiz_data テーブル内の ID
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
 
@@ -296,6 +293,28 @@
 
     // 認証ユーザー状態
     let currentUser = null;
+    let isUserAdmin = false;
+
+    // 管理者判定関数 (admin_users テーブルを参照)
+    async function checkIsAdmin(user) {
+        if (!user) return false;
+        try {
+            const { data, error } = await supabaseClient
+                .from('admin_users')
+                .select('user_id, email')
+                .or(`user_id.eq.${user.id},email.eq.${user.email}`);
+
+            if (error) {
+                console.error('管理者判定エラー:', error);
+                return false;
+            }
+
+            return data && data.length > 0;
+        } catch (err) {
+            console.error(err);
+            return false;
+        }
+    }
 
     // 初期化（LocalStorageからの読み込み & Supabase状態確認）
     window.onload = async function() {
@@ -305,21 +324,17 @@
         await checkLoginStatus();
     };
 
-    // 管理者判定ヘルパー関数（大文字小文字の違いを考慮）
-    function checkIsAdmin(user) {
-        if (!user || !user.email) return false;
-        return user.email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
-    }
-
     // --- Supabase 認証関連 ---
     async function checkLoginStatus() {
         const { data: { user } } = await supabaseClient.auth.getUser();
         currentUser = user;
-        renderAuthUI();
-
         if (currentUser) {
+            isUserAdmin = await checkIsAdmin(currentUser);
             await fetchQuestionsFromSupabase();
+        } else {
+            isUserAdmin = false;
         }
+        renderAuthUI();
         // ログイン状態確定後に問題リストを再描画（削除ボタン表示切り替え）
         renderQuestions();
     }
@@ -329,9 +344,8 @@
         if (!container) return;
 
         if (currentUser) {
-            const isAdmin = checkIsAdmin(currentUser);
             container.innerHTML = `
-                <div class="auth-badge status-online">🟢 ログイン中 (${escapeHtml(currentUser.email)}${isAdmin ? ' / 管理者' : ''})</div>
+                <div class="auth-badge status-online">🟢 ログイン中 (${escapeHtml(currentUser.email)}${isUserAdmin ? ' / 管理者' : ''})</div>
                 <p style="font-size:0.85rem; color:var(--text-sub); margin-bottom:10px;">クラウド同期が有効です。問題の閲覧・追加・編集が可能です。</p>
                 <button class="btn btn-secondary" onclick="logoutFromSupabase()">ログアウト</button>
             `;
@@ -365,6 +379,7 @@
             alert("ログインに失敗しました: " + error.message);
         } else {
             currentUser = data.user;
+            isUserAdmin = await checkIsAdmin(currentUser);
             alert("ログインに成功しました。");
             renderAuthUI();
             await fetchQuestionsFromSupabase();
@@ -375,6 +390,7 @@
     async function logoutFromSupabase() {
         await supabaseClient.auth.signOut();
         currentUser = null;
+        isUserAdmin = false;
         alert("ログアウトしました。");
         renderAuthUI();
         renderQuestions();
@@ -729,7 +745,6 @@
         list.innerHTML = '';
         document.getElementById('qCount').innerText = quizData.questions.length;
 
-        const isAdmin = checkIsAdmin(currentUser);
         const searchInput = document.getElementById('searchQuery');
         const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
@@ -743,7 +758,7 @@
 
             // 削除権限判定（管理者または制作者本人のみ）
             const canDelete = currentUser && (
-                isAdmin ||
+                isUserAdmin ||
                 (q.created_by && q.created_by === currentUser.id)
             );
 
