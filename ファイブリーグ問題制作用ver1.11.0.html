@@ -469,9 +469,6 @@
     const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // 管理者メールアドレス
-    const ADMIN_EMAIL = 's50251050@hiroshima-u.ed.jp';
-
     // レコード識別用ID
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
 
@@ -480,6 +477,7 @@
     let editingIndex = -1;
     let altAnswerCount = 0;
     let currentUser = null;
+    let isAdmin = false;
 
     window.addEventListener('DOMContentLoaded', async () => {
         renderQuestionList();
@@ -488,9 +486,31 @@
     });
 
     // --- Supabase認証 関連 ---
+    async function checkAdminStatus(user) {
+        if (!user) return false;
+        try {
+            const { data, error } = await supabaseClient
+                .from('admin_users')
+                .select('user_id, email')
+                .eq('user_id', user.id)
+                .eq('email', user.email)
+                .maybeSingle();
+
+            if (error) {
+                console.error('Admin Check Error:', error);
+                return false;
+            }
+            return !!data;
+        } catch (e) {
+            console.error('Admin Check Exception:', e);
+            return false;
+        }
+    }
+
     async function checkLoginStatus() {
         const { data: { user } } = await supabaseClient.auth.getUser();
         currentUser = user;
+        isAdmin = await checkAdminStatus(currentUser);
         renderAuthUI();
 
         if (currentUser) {
@@ -506,7 +526,6 @@
         if (!container) return;
 
         if (currentUser) {
-            const isAdmin = currentUser.email === ADMIN_EMAIL;
             container.innerHTML = `
                 <div class="auth-badge status-online">🟢 ログイン中 (${escapeHTML(currentUser.email)}${isAdmin ? ' / 管理者' : ''})</div>
                 <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">クラウド同期が有効です。問題の閲覧・追加・編集が可能です。</p>
@@ -544,6 +563,7 @@
             alert("ログインに失敗しました: " + error.message);
         } else {
             currentUser = data.user;
+            isAdmin = await checkAdminStatus(currentUser);
             alert("ログインに成功しました。");
             renderAuthUI();
             await fetchQuestionsFromSupabase();
@@ -553,6 +573,7 @@
     async function logoutFromSupabase() {
         await supabaseClient.auth.signOut();
         currentUser = null;
+        isAdmin = false;
         alert("ログアウトしました。");
         renderAuthUI();
         renderQuestionList();
@@ -1123,7 +1144,7 @@ async function saveToSupabase() {
 
             // 削除ボタン権限判定（管理者または制作者本人のみ）
             const canDelete = currentUser && (
-                currentUser.email === ADMIN_EMAIL ||
+                isAdmin ||
                 (q.created_by && q.created_by === currentUser.id)
             );
 
@@ -1225,7 +1246,7 @@ async function saveToSupabase() {
     async function deleteQuestion(index) {
         const q = questions[index];
         const canDelete = currentUser && (
-            currentUser.email === ADMIN_EMAIL ||
+            isAdmin ||
             (q.created_by && q.created_by === currentUser.id)
         );
 
@@ -1248,7 +1269,7 @@ async function saveToSupabase() {
 
     async function clearAllQuestions() {
         // 管理者チェック
-        if (!currentUser || currentUser.email !== ADMIN_EMAIL) {
+        if (!currentUser || !isAdmin) {
             alert('一括削除は管理者のみ可能です。');
             return;
         }
