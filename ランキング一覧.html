@@ -36,6 +36,20 @@
             font-family: var(--font-body);
         }
 
+        /* 画面左下の表示 */
+        .bottom-left-display {
+            position: fixed;
+            bottom: 12px;
+            left: 15px;
+            color: var(--accent-neon);
+            font-size: 0.85rem;
+            font-family: var(--font-body);
+            letter-spacing: 1px;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
         /* 画面中央のメインファーストビュー */
         .hero-section {
             width: 100vw;
@@ -101,12 +115,24 @@
 
         .search-group input, .search-group select {
             background: #111;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #ffffff;
             padding: 10px;
             border-radius: 4px;
             font-family: var(--font-body);
             font-size: 0.95rem;
+            color-scheme: dark; /* カレンダーのピッカーや内部アイコン・文字を白ベースにする設定 */
+        }
+
+        .search-group input[type="datetime-local"] {
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        /* WebKitブラウザ向けカレンダーアイコンの背景色・反転調整 */
+        .search-group input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
         }
 
         .search-group input:focus, .search-group select:focus {
@@ -291,10 +317,19 @@
             .ranking-column.active {
                 display: block;
             }
+
+            .bottom-left-display {
+                font-size: 0.75rem;
+                bottom: 8px;
+                left: 10px;
+            }
         }
     </style>
 </head>
 <body>
+
+    <!-- 画面左下の水色表示 -->
+    <div class="bottom-left-display">UM:38</div>
 
     <!-- 1. メイン表示 (中央タイトル) -->
     <section class="hero-section">
