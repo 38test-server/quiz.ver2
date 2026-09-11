@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ネプリーグ2Cない！？ - ルール説明</title>
+    <!-- Google Fonts: BIZ UDP明朝 & 游明朝（フォールバック用） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=BIZ+UDPMincho:wght@400;700&family=Shippori+Mincho&display=swap" rel="stylesheet">
+    
+    <style>
+        /* =========================================================
+           カスタマイズ用 パラメーター設定 (CSS変数)
+           後から変更したい場合はこちらの数値を調整してください。
+           ========================================================= */
+        :root {
+            /* カラー設定 */
+            --bg-color: #000000;              /* 全体背景色 (真っ黒) */
+            --text-color: #ffffff;            /* 文字基本色 */
+            --sub-text-color: #cccccc;        /* サブテキスト色 */
+            --accent-neon: #aae1ff;           /* アクセントカラー (水色) */
+            --line-color: #ffffff;            /* ライン・枠線の色 */
+            
+            /* フォント設定 */
+            --font-title: 'BIZ UDPMincho', 'BIZ UDP明朝', serif; /* タイトル・見出し用 */
+            --font-body: 'Yu Mincho', '游明朝', 'Shippori Mincho', serif;  /* 本文用 */
+            --font-weight-light: 300;         /* 細字 */
+
+            /* アニメーション・タイミング調整 */
+            --op-neon-delay: 300ms;           /* アニメーション開始遅延 */
+            
+            --rotate-duration: 0.8s;          /* 「5つのゲーム」回転アニメーション時間 */
+            --line-down-duration: 0.6s;       /* 縦ラインが降ってくる時間 */
+            --fadein-duration: 0.6s;          /* スクロール時のフェードイン時間 (0.6秒) */
+            
+            /* PC用基本フォントサイズ基準 */
+            --pc-font-scale: 1.25;
+        }
+
+        /* 全体初期化 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-body);
+            font-weight: var(--font-weight-light);
+            overflow-x: hidden;
+        }
+
+        /* スクロール禁止用クラス (アニメーション中) */
+        body.no-scroll {
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* 画面左下の表示 */
+        .bottom-left-display {
+            position: fixed;
+            bottom: 12px;
+            left: 15px;
+            color: var(--accent-neon);
+            font-size: 0.85rem;
+            font-family: var(--font-body);
+            letter-spacing: 1px;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
+        /* =========================================================
+           1. タイトルセクション (ファーストビュー・白色点火アニメーション)
+           ========================================================= */
+        .hero-section {
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0 10px;
+        }
+
+        .op-title-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .op-main-title {
+            font-family: var(--font-title);
+            font-weight: var(--font-weight-light);
+            font-size: clamp(2rem, 8vw, 5rem); /* 横幅いっぱいに広がるよう可変 */
+            width: 100%;
+            white-space: nowrap;
+            letter-spacing: 2px;
+            color: #444444;
+            opacity: 0.3;
+            animation: whiteLighting 1.5s ease-in-out var(--op-neon-delay) forwards;
+        }
+
+        .op-sub-title {
+            font-family: var(--font-title);
+            font-weight: var(--font-weight-light);
+            font-size: clamp(1.2rem, 4vw, 2.5rem);
+            margin-top: 20px;
+            letter-spacing: 4px;
+            color: #444444;
+            opacity: 0.3;
+            animation: whiteLighting 1.5s ease-in-out var(--op-neon-delay) forwards;
+        }
+
+        /* 白色への点滅・点灯アニメーション */
+        @keyframes whiteLighting {
+            0% {
+                color: #333333;
+                opacity: 0.3;
+                filter: brightness(0.5);
+            }
+            20% {
+                color: #ffffff;
+                opacity: 1;
+                filter: brightness(1.5);
+            }
+            30% {
+                color: #333333;
+                opacity: 0.4;
+                filter: brightness(0.6);
+            }
+            40% {
+                color: #ffffff;
+                opacity: 0.9;
+                filter: brightness(1.2);
+            }
+            50% {
+                color: #333333;
+                opacity: 0.3;
+                filter: brightness(0.5);
+            }
+            70% {
+                color: #ffffff;
+                opacity: 1;
+                filter: brightness(1.4);
+            }
+            100% {
+                color: #ffffff;
+                opacity: 1;
+                filter: brightness(1);
+            }
+        }
+
+        /* =========================================================
+           2. メインコンテンツ & イントロセクション
+           ========================================================= */
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .intro-section {
+            text-align: center;
+            padding: 60px 0 40px;
+        }
+
+        .logo-img {
+            max-width: 320px;
+            width: 80%;
+            height: auto;
+            margin-bottom: 30px;
+            display: inline-block;
+        }
+
+        .intro-description {
+            font-size: 1.05rem;
+            line-height: 2;
+            color: var(--sub-text-color);
+            max-width: 750px;
+            margin: 0 auto;
+        }
+
+        /* =========================================================
+           3. アニメーション付き「5つのゲーム」セクション
+           ========================================================= */
+        .games-intro-heading {
+            font-family: var(--font-title);
+            font-size: 1.8rem;
+            text-align: center;
+            margin: 80px 0 40px;
+            letter-spacing: 2px;
+        }
+
+        .stage-container {
+            position: relative;
+            width: 100%;
+            min-height: 80vh;
+            display: flex;
+            margin-top: 40px;
+        }
+
+        /* 縦幅いっぱいに拡大されるターゲット */
+        .rotating-text-wrapper {
+            position: absolute;
+            left: 50%;
+            top: 20%;
+            transform: translate(-50%, 0) scale(1);
+            transform-origin: left bottom;
+            white-space: nowrap;
+            transition: transform var(--rotate-duration) cubic-bezier(0.25, 1, 0.5, 1), left var(--rotate-duration) ease, top var(--rotate-duration) ease;
+            z-index: 10;
+        }
+
+        .rotating-text {
+            font-family: var(--font-title);
+            font-size: 12vh; /* 縦幅いっぱい近くにリサイズ */
+            font-weight: var(--font-weight-light);
+            line-height: 1;
+            color: #ffffff;
+            display: inline-block;
+        }
+
+        /* アニメーション発動状態：90度反時計回り回転し左端へ移動 */
+        .stage-container.animated .rotating-text-wrapper {
+            left: 20px;
+            top: 0;
+            transform: rotate(-90deg) translate(-100%, 0);
+        }
+
+        /* 降りてくる縦ライン */
+        .vertical-line {
+            position: absolute;
+            left: 120px; /* 回転した文字の右側に沿う位置 */
+            top: 0;
+            width: 2px;
+            height: 0%;
+            background-color: var(--line-color);
+            transition: height var(--line-down-duration) ease-in-out;
+        }
+
+        .stage-container.line-active .vertical-line {
+            height: 100%;
+        }
+
+        /* 右側に並ぶ5つのゲームモード一覧 */
+        .game-modes-list {
+            margin-left: 150px; /* ラインの右側へ */
+            width: calc(100% - 150px);
+            display: flex;
+            flex-direction: column;
+            gap: 60px;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+
+        .stage-container.line-active .game-modes-list {
+            opacity: 1;
+        }
+
+        /* =========================================================
+           4. 各ゲームモードカード & view more アコーディオン
+           ========================================================= */
+        .game-item {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+            padding-bottom: 25px;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 10px;
+        }
+
+        .game-name {
+            font-family: var(--font-title);
+            font-size: 1.6rem;
+            font-weight: var(--font-weight-light);
+            letter-spacing: 1px;
+        }
+
+        .game-difficulty {
+            font-size: 0.95rem;
+            color: var(--sub-text-color);
+        }
+
+        .view-more-btn {
+            background: none;
+            border: none;
+            color: var(--accent-neon);
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            cursor: pointer;
+            padding: 5px 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: color 0.3s ease;
+        }
+
+        .view-more-btn:hover {
+            color: #ffffff;
+        }
+
+        /* アコーディオン展開コンテンツ */
+        .game-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-out, opacity 0.5s ease-out;
+            opacity: 0;
+            margin-top: 0;
+        }
+
+        .game-details.open {
+            max-height: 1000px;
+            opacity: 1;
+            margin-top: 20px;
+        }
+
+        .game-details-content {
+            display: flex;
+            flex-direction: row; /* 左側に画像、右側に説明 */
+            gap: 25px;
+            align-items: flex-start;
+        }
+
+        .game-image {
+            width: 45%;
+            max-width: 300px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.2);
+            object-fit: cover;
+        }
+
+        .game-text {
+            width: 55%;
+            font-size: 1rem;
+            line-height: 1.8;
+            color: #e0e0e0;
+        }
+
+        .game-text .sub-note {
+            margin-top: 10px;
+            font-size: 0.88rem;
+            color: var(--sub-text-color);
+        }
+
+        /* スクロール時のフェードイン (0.6秒) */
+        .fade-in-element {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity var(--fadein-duration) ease, transform var(--fadein-duration) ease;
+        }
+
+        .fade-in-element.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* =========================================================
+           5. エンディング & ランキングリンク & フッター
+           ========================================================= */
+        .ending-section {
+            text-align: center;
+            padding: 100px 0 40px;
+            margin-top: 80px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .ending-text {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+            color: #e5e7eb;
+        }
+
+        .good-luck {
+            font-family: var(--font-title);
+            font-size: 2.2rem;
+            letter-spacing: 4px;
+            color: var(--accent-neon);
+            margin-top: 20px;
+            filter: brightness(1.2);
+        }
+
+        /* クレジット1個上の「ランキング一覧」リンク */
+        .ranking-link-container {
+            text-align: center;
+            margin: 40px 0 20px;
+        }
+
+        .ranking-link {
+            font-family: var(--font-body);
+            color: #aae1ff;
+            font-size: 1.2rem;
+            text-decoration: none;
+            letter-spacing: 2px;
+            display: inline-block;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .ranking-link:hover {
+            opacity: 0.8;
+            transform: translateY(-2px);
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px 0;
+            font-size: 0.85rem;
+            color: var(--sub-text-color);
+        }
+
+        footer p {
+            margin: 5px 0;
+        }
+
+        /* =========================================================
+           6. レスポンシブ対応 (スマホ・PC最適化)
+           ========================================================= */
+
+        /* スマホ向け調整 (横幅768px未満) */
+        @media (max-width: 767px) {
+            .stage-container {
+                flex-direction: column;
+                min-height: auto;
+            }
+
+            .rotating-text-wrapper {
+                position: relative;
+                left: 0 !important;
+                top: 0 !important;
+                transform: none !important;
+                margin-bottom: 20px;
+                text-align: center;
+            }
+
+            .rotating-text {
+                font-size: 2.5rem;
+            }
+
+            .vertical-line {
+                display: none; /* スマホでは縦ライン省略 */
+            }
+
+            .game-modes-list {
+                margin-left: 0;
+                width: 100%;
+                opacity: 1;
+            }
+
+            .game-details-content {
+                flex-direction: column-reverse; /* スマホでは左側(画像)が下側に配置 */
+            }
+
+            .game-image {
+                width: 100%;
+                max-width: 100%;
+            }
+
+            .game-text {
+                width: 100%;
+            }
+
+            .bottom-left-display {
+                font-size: 0.75rem;
+                bottom: 8px;
+                left: 10px;
+            }
+        }
+
+        /* PC向け文字サイズ・レイアウトスケールアップ */
+        @media (min-width: 1024px) {
+            body {
+                font-size: calc(1rem * var(--pc-font-scale));
+            }
+
+            .intro-description {
+                font-size: 1.2rem;
+            }
+
+            .game-name {
+                font-size: 2rem;
+            }
+
+            .game-text {
+                font-size: 1.15rem;
+            }
+
+            .games-intro-heading {
+                font-size: 2.3rem;
+            }
+        }
+    </style>
+</head>
+<body class="no-scroll">
+
+    <!-- 画面左下の水色表示 -->
+    <div class="bottom-left-display">UM:38</div>
+
+    <!-- 1. タイトルセクション -->
+    <section class="hero-section">
+        <div class="op-title-container">
+            <div class="op-main-title">- ネプリーグ2Cない？ -</div>
+            <div class="op-sub-title">ルール説明</div>
+        </div>
+    </section>
+
+    <!-- メインコンテンツ -->
+    <div class="container">
+
+        <!-- 2. ロゴ & ゲーム概要説明 -->
+        <section class="intro-section fade-in-element">
+            <img src="assets/logo.png" alt="ネプリーグ2Cない？ ロゴ" class="logo-img" onerror="this.style.display='none';">
+            <p class="intro-description">
+                テレビ番組である「ネプリーグ」をリスペクトして作成された、協力型クイズゲームです。<br>
+                全5つのゲームに挑戦し、勝利を目指しましょう！
+            </p>
+        </section>
+
+        <!-- 3. 見出し ＆ 動的アニメーションセクション -->
+        <h2 class="games-intro-heading fade-in-element">ここでは5つのゲームが遊べます。</h2>
+
+        <div class="stage-container" id="stageContainer">
+            <!-- 回転移動する「5つのゲーム」テキスト -->
+            <div class="rotating-text-wrapper" id="rotatingWrapper">
+                <span class="rotating-text">5つのゲーム</span>
+            </div>
+
+            <!-- 降りてくる縦ライン -->
+            <div class="vertical-line" id="verticalLine"></div>
+
+            <!-- 5つのゲームモード一覧 -->
+            <div class="game-modes-list">
+
+                <!-- 1. ファイブリーグ -->
+                <div class="game-item fade-in-element">
+                    <div class="game-header">
+                        <span class="game-name">1. ファイブリーグ</span>
+                        <span class="game-difficulty">難易度 : 3</span>
+                    </div>
+                    <button class="view-more-btn" onclick="toggleViewMore(this)">view more ↓</button>
+                    <div class="game-details">
+                        <div class="game-details-content">
+                            <!-- 画像フォールバック対応 (jpg/png) -->
+                            <img src="assets/hp_image_1.png" onerror="this.onerror=null; this.src='assets/hp_image_1.jpg';" alt="ファイブリーグ" class="game-image">
+                            <div class="game-text">
+                                <p>答えが5文字で構成される問題を1人1文字ずつ答え、正解を導くゲームです。</p>
+                                <p class="sub-note">※全員が分かっていないと正解できないため、難易度は高いと言えるでしょう。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. ファイブボンバー -->
+                <div class="game-item fade-in-element">
+                    <div class="game-header">
+                        <span class="game-name">2. ファイブボンバー</span>
+                        <span class="game-difficulty">難易度 : 2</span>
+                    </div>
+                    <button class="view-more-btn" onclick="toggleViewMore(this)">view more ↓</button>
+                    <div class="game-details">
+                        <div class="game-details-content">
+                            <img src="assets/hp_image_2.png" onerror="this.onerror=null; this.src='assets/hp_image_2.jpg';" alt="ファイブボンバー" class="game-image">
+                            <div class="game-text">
+                                <p>答えが五つ以上ある問題を一人一つずつ答えを言っていくゲームです。</p>
+                                <p class="sub-note">※後の人のことを考え、できるだけ思いつきづらい答えを言うことが大切です。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. パーセントバルーン -->
+                <div class="game-item fade-in-element">
+                    <div class="game-header">
+                        <span class="game-name">3. パーセントバルーン</span>
+                        <span class="game-difficulty">難易度 : 5</span>
+                    </div>
+                    <button class="view-more-btn" onclick="toggleViewMore(this)">view more ↓</button>
+                    <div class="game-details">
+                        <div class="game-details-content">
+                            <img src="assets/hp_image_3.png" onerror="this.onerror=null; this.src='assets/hp_image_3.jpg';" alt="パーセントバルーン" class="game-image">
+                            <div class="game-text">
+                                <p>あるものの割合を％で答えるゲームです。1％の誤差につき、一つの風船が割れます。</p>
+                                <p class="sub-note">※1回でも大誤差をしてしまったら大ピンチのため、難易度はかなり高いと言えるでしょう。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. トロッコアドベンチャー -->
+                <div class="game-item fade-in-element">
+                    <div class="game-header">
+                        <span class="game-name">4. トロッコアドベンチャー</span>
+                        <span class="game-difficulty">難易度 : 3</span>
+                    </div>
+                    <button class="view-more-btn" onclick="toggleViewMore(this)">view more ↓</button>
+                    <div class="game-details">
+                        <div class="game-details-content">
+                            <img src="assets/hp_image_4.png" onerror="this.onerror=null; this.src='assets/hp_image_4.jpg';" alt="トロッコアドベンチャー" class="game-image">
+                            <div class="game-text">
+                                <p>全五問のシンプルな二択クイズです。</p>
+                                <p class="sub-note">※一度でも間違えると即脱落のため、注意するべきです。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. ロゴファクトリー -->
+                <div class="game-item fade-in-element">
+                    <div class="game-header">
+                        <span class="game-name">5. ロゴファクトリー</span>
+                        <span class="game-difficulty">難易度 : 4</span>
+                    </div>
+                    <button class="view-more-btn" onclick="toggleViewMore(this)">view more ↓</button>
+                    <div class="game-details">
+                        <div class="game-details-content">
+                            <img src="assets/hp_image_5.png" onerror="this.onerror=null; this.src='assets/hp_image_5.jpg';" alt="ロゴファクトリー" class="game-image">
+                            <div class="game-text">
+                                <p>画像のロゴから何のロゴか当てるゲームです。</p>
+                                <p class="sub-note">※意外と分からないため、なめてかかったら痛い目に遭う可能性が高いでしょう。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- エンディングエリア -->
+        <section class="ending-section fade-in-element">
+            <p class="ending-text">ルール説明は以上です。</p>
+            <p class="ending-text">それでは、貴方だけの正解を掴みに行ってきてください。</p>
+            <div class="good-luck">Good Luck.</div>
+        </section>
+
+        <!-- クレジットの1個上のランキング一覧リンク -->
+        <div class="ranking-link-container fade-in-element">
+            <a href="ランキング一覧.html" class="ranking-link">ランキング一覧</a>
+        </div>
+
+        <!-- フッター（クレジット） -->
+        <footer>
+            <p>Movie : Niizi</p>
+            <p>BGM : Tak_mfk</p>
+        </footer>
+
+    </div>
+
+    <!-- 制御スクリプト -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 1. アニメーション完了までスクロールを禁止し、完了後に解除 ---
+            setTimeout(() => {
+                document.body.classList.remove('no-scroll');
+            }, 1800); // 1.8秒後（300ms遅延 + 1.5sアニメーション）に解除
+
+            // --- 2. スクロール監視 & 「5つのゲーム」回転アニメーション ---
+            const stageContainer = document.getElementById('stageContainer');
+            let hasAnimated = false;
+
+            const handleScrollAnimation = () => {
+                // 「5つのゲーム」エリアへのスクロール検知
+                if (!hasAnimated && stageContainer) {
+                    const rect = stageContainer.getBoundingClientRect();
+                    if (rect.top <= window.innerHeight * 0.6) {
+                        hasAnimated = true;
+                        
+                        // 0.7秒静止後に回転アニメーション開始
+                        setTimeout(() => {
+                            stageContainer.classList.add('animated');
+
+                            // 回転完了後(約0.8秒後)にラインを降ろす
+                            setTimeout(() => {
+                                stageContainer.classList.add('line-active');
+                            }, 700);
+                        }, 700);
+                    }
+                }
+
+                // スクロール時の要素フェードイン (0.6秒)
+                const fadeElements = document.querySelectorAll('.fade-in-element');
+                fadeElements.forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.top < window.innerHeight * 0.88) {
+                        el.classList.add('visible');
+                    }
+                });
+            };
+
+            window.addEventListener('scroll', handleScrollAnimation);
+            handleScrollAnimation(); // 初回実行
+        });
+
+        // --- 3. view more ↓ ボタン切り替え (アコーディオン展開) ---
+        function toggleViewMore(btn) {
+            const gameItem = btn.closest('.game-item');
+            const details = gameItem.querySelector('.game-details');
+            
+            if (details.classList.contains('open')) {
+                details.classList.remove('open');
+                btn.textContent = 'view more ↓';
+            } else {
+                details.classList.add('open');
+                btn.textContent = 'close ↑';
+            }
+        }
+    </script>
+</body>
+</html>
