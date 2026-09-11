@@ -135,16 +135,10 @@
             font-size: var(--header-font-size);
             color: var(--title-color);
             text-shadow: 0 0 20px rgba(250, 204, 21, 0.6), 3px 3px 6px #000;
-            margin-top: 50px;
             margin-bottom: 30px;
             border-bottom: 4px solid var(--border-color);
             padding-bottom: 15px;
             width: 100%;
-        }
-
-        /* 最初のクレジットカード見出しの上余白を調整 */
-        .credit-first-line:first-child {
-            margin-top: 0;
         }
 
         /* クレジット最後のロゴ画像用スタイル */
@@ -210,8 +204,8 @@
     // ====================================================
     // Supabase 設定
     // ====================================================
-    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const SUPABASE_URL = 'https://wfddewnonkwxwlaihamn.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_RFILYcq2R5yx72AMhsh0JQ_Bfk1eZHA';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // ====================================================
@@ -287,16 +281,16 @@
                 const now = new Date();
                 const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-                // 総合ランキングは50位まで取得
-                overallData = data.slice(0, 50);
+                // 総合ランキングは20位まで取得
+                overallData = data.slice(0, 20);
 
-                // 今日のランキングは上限制限なし（全件取得）
+                // 今日のランキング（50位上限）
                 todayData = data.filter(item => {
                     if (!item.created_at) return false;
                     const itemDate = new Date(item.created_at);
                     const itemDateStr = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}-${String(itemDate.getDate()).padStart(2, '0')}`;
                     return itemDateStr === todayStr;
-                });
+                }).slice(0, 50);
             }
         } catch (e) {
             console.warn(`[${game.name}] データ取得失敗:`, e);
@@ -327,39 +321,35 @@
     }
 
     // ====================================================
-    // クレジット取得・表示関数 (ファイルごとに独立した見出しを生成)
+    // クレジット取得・表示関数
     // ====================================================
     async function displayCredits() {
-        const creditFiles = ['credits.txt', 'credits2.txt', 'credits3.txt'];
-        let html = '';
-
-        for (const fileName of creditFiles) {
-            try {
-                const response = await fetch(fileName);
-                if (response.ok) {
-                    const text = await response.text();
-                    const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-                    
-                    lines.forEach((line, index) => {
-                        if (index === 0) {
-                            // 各txtファイルの1行目を独立した巨大見出しにする
-                            html += `<div class="credit-first-line">${escapeHtml(line)}</div>`;
-                        } else {
-                            html += `<div class="credit-line">${escapeHtml(line)}</div>`;
-                        }
-                    });
-                } else {
-                    html += `<div class="credit-first-line">${fileName}</div>`;
-                    html += `<div class="credit-line">ファイルが見つかりません</div>`;
-                }
-            } catch (e) {
-                html += `<div class="credit-first-line">${fileName}</div>`;
-                html += `<div class="credit-line">読み込みに失敗しました</div>`;
+        let lines = [];
+        try {
+            // 同一フォルダ内の credits.txt を読み込み
+            const response = await fetch('credits.txt');
+            if (response.ok) {
+                const text = await response.text();
+                lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+            } else {
+                lines = ['クレジット', 'credits.txt が見つかりません'];
             }
+        } catch (e) {
+            lines = ['クレジット', 'credits.txt の読み込みに失敗しました'];
         }
 
-        // スタッフロールの最後に指定ロゴ画像を追加
-        const logoUrl = 'https://vnnuqbndesdemwacneqf.supabase.co/storage/v1/object/sign/Required%20Materials/logo.png?token=eyJraWQiOiI3ZDI5NWIzNC05YTlhLTQyYjMtOWYzMy03NzU2YTA2YzNlYTgiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJSZXF1aXJlZCBNYXRlcmlhbHMvbG9nby5wbmciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4MDgzMDE4LCJleHAiOjE4MTk2MTkwMTh9.5BYBEiuWLqV1Ra5Pdz4LCvfUaKrJU3jwE293-_fc3sM';
+        // HTML構築（初行のみ巨大化）
+        let html = '';
+        lines.forEach((line, index) => {
+            if (index === 0) {
+                html += `<div class="credit-first-line">${escapeHtml(line)}</div>`;
+            } else {
+                html += `<div class="credit-line">${escapeHtml(line)}</div>`;
+            }
+        });
+
+        // スタッフロールの最後に指定ロゴ画像を追加 (assetsフォルダから読み込み)
+        const logoUrl = 'assets/logo.png';
         html += `<img src="${logoUrl}" alt="Logo" class="credit-logo">`;
 
         await animateContent(html);

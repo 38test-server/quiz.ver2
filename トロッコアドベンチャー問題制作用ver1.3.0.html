@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>トロッコアドベンチャー - 問題制作ツール</title>
+  <!-- Supabase JS Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- JSZip Client (ZIP操作用) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     :root {
       --bg-color: #1f140e;
@@ -325,7 +328,6 @@
     .status-online { background: #27ae60; color: #fff; }
     .status-offline { background: #a93226; color: #fff; }
 
-    /* 検索フィルターエリアのスタイル */
     .search-bar-container {
       margin-bottom: 20px;
       display: flex;
@@ -353,7 +355,7 @@
   <div class="container">
     <header>
       <h1>トロッコアドベンチャー - 問題制作</h1>
-      <p class="subtitle">問題データの作成・編集・JSON保存/読み込み・クラウド同期</p>
+      <p class="subtitle">問題データの作成・編集・JSON/画像ZIP保存/読み込み・クラウド同期</p>
     </header>
 
     <div class="card">
@@ -362,10 +364,11 @@
     </div>
 
     <div class="actions-bar">
-      <button class="btn" onclick="exportJSON()">JSON書き出し</button>
-      <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">JSON読み込み</button>
+      <button class="btn" onclick="exportJSON()">📥 JSON & 画像ZIP 書き出し (保存)</button>
+      <button class="btn btn-secondary" onclick="triggerImportQuestions()">📤 JSON & 画像ZIP 読み込み (マージ)</button>
+      <button class="btn btn-secondary" onclick="convertBase64ToStorage()">🖼️ Base64画像をStorageへ移行</button>
       <button class="btn btn-secondary" onclick="fetchQuestionsFromSupabase(true)">🔄 クラウドから問題再読み込み</button>
-      <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importJSON(event)">
+      <input type="file" id="importFileInput" accept=".json,.zip" multiple style="display: none;" onchange="importJSON(event)">
     </div>
 
     <div class="card">
@@ -465,25 +468,29 @@
 
   <script>
     // --- Supabaseの設定 ---
-    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const SUPABASE_URL = 'https://wfddewnonkwxwlaihamn.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_RFILYcq2R5yx72AMhsh0JQ_Bfk1eZHA';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // レコード識別用ID (quiz_data テーブル内での行ID)
+    // レコード識別用ID & Storage設定
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+    const BUCKET_NAME = 'torokko_images';
+    const STORAGE_PUBLIC_URL = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/`;
 
     // 問題データの保存配列
     let questions = [];
     
-    // 一時保持用ベース64画像
+    // 一時保持用画像
     let currentImage1 = "";
     let currentImage2 = "";
+    let selectedFile1 = null;
+    let selectedFile2 = null;
 
     // 認証ユーザー状態
     let currentUser = null;
     let isUserAdmin = false;
 
-    // 管理者判定関数 (admin_users テーブルを参照)
+    // 管理者判定関数
     async function checkIsAdmin(user) {
       if (!user) return false;
       try {
@@ -509,7 +516,6 @@
       loadFromLocalStorage();
       renderQuestions();
 
-      // Supabaseの認証状態の変化（ページロード時のセッション復元含む）を監視
       supabaseClient.auth.onAuthStateChange(async (event, session) => {
         currentUser = session ? session.user : null;
         if (currentUser) {
@@ -572,7 +578,7 @@
       alert("ログアウトしました。");
     }
 
-    // --- Supabase データ同期処理 (quiz_data テーブルの torokko カラムを使用) ---
+    // --- Supabase データ同期処理 ---
     async function fetchQuestionsFromSupabase(isManual = false) {
       if (!currentUser) {
         if (isManual) alert("ログインが必要です。");
@@ -586,7 +592,7 @@
           .eq('id', QUIZ_DATA_ROW_ID)
           .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 = 行が見つからない場合
+        if (error && error.code !== 'PGRST116') {
           console.error("Supabase読み込みエラー:", error);
           if (isManual) alert("データの取得に失敗しました: " + error.message);
           return;
@@ -605,7 +611,6 @@
       }
     }
 
-    // Supabaseへ配列全体を一括同期保存するヘルパー関数
     async function syncAllToSupabase() {
       if (!currentUser) return true;
 
@@ -624,6 +629,88 @@
       return true;
     }
 
+    // --- Base64データ URL → Blob 変換ヘルパー関数 ---
+    function base64ToBlob(base64Data) {
+      const parts = base64Data.split(';base64,');
+      const contentType = parts[0].split(':')[1] || 'image/jpeg';
+      const raw = window.atob(parts[1]);
+      const rawLength = raw.length;
+      const uInt8Array = new Uint8Array(rawLength);
+
+      for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+      return new Blob([uInt8Array], { type: contentType });
+    }
+
+    // --- 既存の Base64 画像を一括で Supabase Storage にアップロードして URL 化する処理 ---
+    async function convertBase64ToStorage() {
+      if (!currentUser) {
+        alert("Storageへアップロードするにはログインが必要です。");
+        return;
+      }
+
+      let convertedCount = 0;
+      let totalTargets = 0;
+
+      // 対象数をカウント
+      for (const q of questions) {
+        if (q.choice1?.image && q.choice1.image.startsWith('data:image/')) totalTargets++;
+        if (q.choice2?.image && q.choice2.image.startsWith('data:image/')) totalTargets++;
+      }
+
+      if (totalTargets === 0) {
+        alert("Base64形式の画像データは見つかりませんでした。すべての画像はすでにStorage URL化されています。");
+        return;
+      }
+
+      if (!confirm(`データ内に ${totalTargets} 件の Base64 画像が見つかりました。\nSupabase Storage へアップロードして公開 URL に置き換えますか？`)) {
+        return;
+      }
+
+      for (const q of questions) {
+        const recordId = q.id || ('torokko_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+
+        // 選択肢1の画像チェック
+        if (q.choice1?.image && q.choice1.image.startsWith('data:image/')) {
+          try {
+            const blob = base64ToBlob(q.choice1.image);
+            const fileName = `${recordId}_choice1.jpg`;
+            const uploadedUrl = await uploadImageToStorage(blob, fileName);
+            if (uploadedUrl) {
+              q.choice1.image = uploadedUrl;
+              convertedCount++;
+            }
+          } catch (e) {
+            console.error("Choice1 画像変換失敗:", e);
+          }
+        }
+
+        // 選択肢2の画像チェック
+        if (q.choice2?.image && q.choice2.image.startsWith('data:image/')) {
+          try {
+            const blob = base64ToBlob(q.choice2.image);
+            const fileName = `${recordId}_choice2.jpg`;
+            const uploadedUrl = await uploadImageToStorage(blob, fileName);
+            if (uploadedUrl) {
+              q.choice2.image = uploadedUrl;
+              convertedCount++;
+            }
+          } catch (e) {
+            console.error("Choice2 画像変換失敗:", e);
+          }
+        }
+      }
+
+      // データベースと LocalStorage の更新
+      const success = await syncAllToSupabase();
+      if (success) {
+        saveToLocalStorage();
+        renderQuestions();
+        alert(`移行が完了しました！\n${convertedCount} 件の画像を Storage にアップロードし、URLに更新しました。`);
+      }
+    }
+
     // --- LocalStorage 処理 ---
     function loadFromLocalStorage() {
       const data = localStorage.getItem('torokko_questions');
@@ -638,13 +725,17 @@
     }
 
     function saveToLocalStorage() {
-      localStorage.setItem('torokko_questions', JSON.stringify(questions));
+      try {
+        localStorage.setItem('torokko_questions', JSON.stringify(questions));
+      } catch (e) {
+        console.warn('LocalStorage save failed:', e);
+      }
     }
 
     // 画像縮小関数
     function resizeImage(file, maxWidth = 600) {
       return new Promise((resolve, reject) => {
-        if (!file) return resolve("");
+        if (!file) return resolve(null);
         
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -665,7 +756,12 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
             
-            resolve(canvas.toDataURL('image/jpeg', 0.85));
+            canvas.toBlob((blob) => {
+              resolve({
+                blob: blob,
+                dataUrl: canvas.toDataURL('image/jpeg', 0.85)
+              });
+            }, 'image/jpeg', 0.85);
           };
           img.onerror = reject;
           img.src = e.target.result;
@@ -680,14 +776,16 @@
       if (!file) return;
 
       try {
-        const base64 = await resizeImage(file, 600);
+        const resized = await resizeImage(file, 600);
         if (choiceNum === 1) {
-          currentImage1 = base64;
-          document.getElementById('preview1').src = base64;
+          selectedFile1 = resized.blob;
+          currentImage1 = resized.dataUrl;
+          document.getElementById('preview1').src = resized.dataUrl;
           document.getElementById('clearImg1').style.display = 'inline-block';
         } else {
-          currentImage2 = base64;
-          document.getElementById('preview2').src = base64;
+          selectedFile2 = resized.blob;
+          currentImage2 = resized.dataUrl;
+          document.getElementById('preview2').src = resized.dataUrl;
           document.getElementById('clearImg2').style.display = 'inline-block';
         }
       } catch (err) {
@@ -698,15 +796,31 @@
     function clearImage(choiceNum) {
       if (choiceNum === 1) {
         currentImage1 = "";
+        selectedFile1 = null;
         document.getElementById('choice1Image').value = "";
         document.getElementById('preview1').src = "";
         document.getElementById('clearImg1').style.display = 'none';
       } else {
         currentImage2 = "";
+        selectedFile2 = null;
         document.getElementById('choice2Image').value = "";
         document.getElementById('preview2').src = "";
         document.getElementById('clearImg2').style.display = 'none';
       }
+    }
+
+    // Supabase Storage への画像アップロード関数
+    async function uploadImageToStorage(fileOrBlob, fileName) {
+      if (!supabaseClient) return null;
+      const { data, error } = await supabaseClient.storage
+        .from(BUCKET_NAME)
+        .upload(fileName, fileOrBlob, { upsert: true });
+
+      if (error) {
+        console.error('Storageアップロードエラー:', error);
+        return null;
+      }
+      return `${STORAGE_PUBLIC_URL}${fileName}`;
     }
 
     // フォーム送信（新規登録 / 更新）
@@ -735,20 +849,57 @@
 
       const recordId = editId || 'torokko_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
 
+      let finalImg1Url = currentImage1;
+      let finalImg2Url = currentImage2;
+
+      // 画像1のアップロード処理 (ファイル選択時 または Base64データ時)
+      if (selectedFile1) {
+        const fileName = `${recordId}_choice1.jpg`;
+        const uploaded = await uploadImageToStorage(selectedFile1, fileName);
+        if (uploaded) finalImg1Url = uploaded;
+      } else if (currentImage1 && currentImage1.startsWith('data:image/')) {
+        try {
+          const blob = base64ToBlob(currentImage1);
+          const fileName = `${recordId}_choice1.jpg`;
+          const uploaded = await uploadImageToStorage(blob, fileName);
+          if (uploaded) finalImg1Url = uploaded;
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      // 画像2のアップロード処理
+      if (selectedFile2) {
+        const fileName = `${recordId}_choice2.jpg`;
+        const uploaded = await uploadImageToStorage(selectedFile2, fileName);
+        if (uploaded) finalImg2Url = uploaded;
+      } else if (currentImage2 && currentImage2.startsWith('data:image/')) {
+        try {
+          const blob = base64ToBlob(currentImage2);
+          const fileName = `${recordId}_choice2.jpg`;
+          const uploaded = await uploadImageToStorage(blob, fileName);
+          if (uploaded) finalImg2Url = uploaded;
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      const existingItem = editId ? questions.find(q => q.id === editId) : null;
+
       const qData = {
         id: recordId,
         level: qLevel,
         questionText: qText,
         choice1: {
           text: c1Text,
-          image: currentImage1
+          image: finalImg1Url || ""
         },
         choice2: {
           text: c2Text,
-          image: currentImage2
+          image: finalImg2Url || ""
         },
         correctAnswer: parseInt(correctAnswer, 10),
-        created_by: currentUser ? currentUser.id : null
+        created_by: existingItem ? existingItem.created_by : (currentUser ? currentUser.id : null)
       };
 
       if (editId) {
@@ -760,7 +911,6 @@
         questions.push(qData);
       }
 
-      // Supabaseへ同期保存
       const success = await syncAllToSupabase();
       if (!success) return;
 
@@ -773,13 +923,10 @@
     function renderQuestions() {
       const container = document.getElementById('questionList');
       
-      // 検索キーワード・画像フィルター値の取得
       const keyword = (document.getElementById('searchKeyword')?.value || '').trim().toLowerCase();
       const imgFilter = document.getElementById('imageFilter')?.value || 'all';
 
-      // 検索条件による問題データの絞り込み
       const filteredQuestions = questions.filter(q => {
-        // キーワード検索（問題文、選択肢1テキスト、選択肢2テキスト）
         const qText = (q.questionText || '').toLowerCase();
         const c1Text = (q.choice1 && q.choice1.text ? q.choice1.text : '').toLowerCase();
         const c2Text = (q.choice2 && q.choice2.text ? q.choice2.text : '').toLowerCase();
@@ -789,7 +936,6 @@
           c1Text.includes(keyword) || 
           c2Text.includes(keyword);
 
-        // 画像有無フィルター判定
         const hasImage = !!((q.choice1 && q.choice1.image) || (q.choice2 && q.choice2.image));
         let matchImage = true;
         if (imgFilter === 'has_image') {
@@ -801,7 +947,6 @@
         return matchKeyword && matchImage;
       });
 
-      // 問題数の表示更新（絞り込み時は「ヒット数 / 全体数」で表示）
       const qCountElem = document.getElementById('qCount');
       if (qCountElem) {
         if (keyword || imgFilter !== 'all') {
@@ -822,14 +967,12 @@
       }
 
       container.innerHTML = filteredQuestions.map(q => {
-        // 全体配列における通し番号を取得
         const originalIdx = questions.findIndex(item => item.id === q.id);
         const displayIdx = originalIdx !== -1 ? originalIdx + 1 : '';
 
         const level = q.level || 'lv1';
         const levelLabel = level === 'lv2' ? 'Lv.2' : 'Lv.1';
 
-        // 削除ボタン権限判定（管理者または制作者本人のみ）
         const canDelete = currentUser && (
           isUserAdmin ||
           (q.created_by && q.created_by === currentUser.id)
@@ -881,10 +1024,12 @@
       document.getElementById('choice2Text').value = q.choice2.text || '';
 
       currentImage1 = q.choice1.image || '';
+      selectedFile1 = null;
       document.getElementById('preview1').src = currentImage1;
       document.getElementById('clearImg1').style.display = currentImage1 ? 'inline-block' : 'none';
 
       currentImage2 = q.choice2.image || '';
+      selectedFile2 = null;
       document.getElementById('preview2').src = currentImage2;
       document.getElementById('clearImg2').style.display = currentImage2 ? 'inline-block' : 'none';
 
@@ -899,11 +1044,26 @@
     }
 
     async function deleteQuestion(id) {
+      const q = questions.find(item => item.id === id);
+      if (!q) return;
+
       if (!confirm('この問題を削除してもよろしいですか？')) return;
 
-      questions = questions.filter(q => q.id !== id);
+      if (supabaseClient) {
+        const filesToRemove = [];
+        if (q.choice1?.image && q.choice1.image.startsWith('http')) {
+          filesToRemove.push(q.choice1.image.split('/').pop());
+        }
+        if (q.choice2?.image && q.choice2.image.startsWith('http')) {
+          filesToRemove.push(q.choice2.image.split('/').pop());
+        }
+        if (filesToRemove.length > 0) {
+          await supabaseClient.storage.from(BUCKET_NAME).remove(filesToRemove);
+        }
+      }
 
-      // Supabaseへ同期保存
+      questions = questions.filter(item => item.id !== id);
+
       const success = await syncAllToSupabase();
       if (!success) return;
 
@@ -920,6 +1080,9 @@
 
       currentImage1 = '';
       currentImage2 = '';
+      selectedFile1 = null;
+      selectedFile2 = null;
+
       document.getElementById('preview1').src = '';
       document.getElementById('preview2').src = '';
       document.getElementById('clearImg1').style.display = 'none';
@@ -930,74 +1093,168 @@
       document.getElementById('cancelEditBtn').style.display = 'none';
     }
 
-    function exportJSON() {
+    // --- JSON & 画像ZIP の書き出し ---
+    async function exportJSON() {
       if (questions.length === 0) {
         alert('書き出す問題がありません。');
         return;
       }
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(questions, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `torokko_questions_${Date.now()}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
+
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+      const jsonStr = JSON.stringify(questions, null, 2);
+      const jsonBlob = new Blob([jsonStr], { type: "application/json" });
+      const jsonUrl = URL.createObjectURL(jsonBlob);
+      
+      const aJson = document.createElement('a');
+      aJson.href = jsonUrl;
+      aJson.download = `torokko_questions_${today}.json`;
+      document.body.appendChild(aJson);
+      aJson.click();
+      aJson.remove();
+      URL.revokeObjectURL(jsonUrl);
+
+      const zip = new JSZip();
+      const imgFolder = zip.folder("images");
+      let imageCount = 0;
+
+      for (const q of questions) {
+        const imageUrls = [q.choice1?.image, q.choice2?.image].filter(url => url && url.startsWith('http'));
+        for (const imgUrl of imageUrls) {
+          try {
+            const res = await fetch(imgUrl);
+            const blob = await res.blob();
+            const fileName = imgUrl.split('/').pop();
+            imgFolder.file(fileName, blob);
+            imageCount++;
+          } catch (e) {
+            console.error("画像の取得に失敗:", imgUrl);
+          }
+        }
+      }
+
+      if (imageCount > 0) {
+        alert("画像ZIPアーカイブを作成中です...");
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const aZip = document.createElement('a');
+        aZip.href = zipUrl;
+        aZip.download = `torokko_images_${today}.zip`;
+        document.body.appendChild(aZip);
+        aZip.click();
+        aZip.remove();
+        URL.revokeObjectURL(zipUrl);
+      }
     }
 
-    function importJSON(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+    // --- インポートダイアログ起動 ---
+    function triggerImportQuestions() {
+      const fileInput = document.getElementById('importFileInput');
+      fileInput.value = '';
+      alert("ファイル選択画面が開きます。\n・JSONファイル単体、または\n・JSONファイルと画像ZIPファイルを同時に選択（Ctrl/Cmdキーを押しながら選択）してください。");
+      fileInput.click();
+    }
 
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const importedData = JSON.parse(e.target.result);
-          if (!Array.isArray(importedData)) {
-            alert('無効なJSONフォーマットです。(配列形式でありません)');
-            return;
+    // --- JSON & 画像ZIP の追加マージ読み込み ---
+    async function importJSON(event) {
+      const files = Array.from(event.target.files);
+      if (files.length === 0) return;
+
+      const jsonFile = files.find(f => f.name.toLowerCase().endsWith('.json'));
+      const zipFile = files.find(f => f.name.toLowerCase().endsWith('.zip'));
+
+      if (!jsonFile) {
+        alert("JSONファイルが選択されていません。.json ファイルを必ず選択してください。");
+        return;
+      }
+
+      try {
+        let uploadedImageCount = 0;
+
+        if (zipFile && supabaseClient) {
+          const zip = await JSZip.loadAsync(zipFile);
+          for (const relativePath of Object.keys(zip.files)) {
+            const zipEntry = zip.files[relativePath];
+            if (zipEntry.dir) continue;
+
+            const fileName = relativePath.split('/').pop();
+            if (!fileName || !fileName.match(/\.(jpg|jpeg|png|webp|gif)$/i)) continue;
+
+            const blob = await zipEntry.async("blob");
+            const { error } = await supabaseClient.storage
+              .from(BUCKET_NAME)
+              .upload(fileName, blob, { upsert: true });
+
+            if (!error) uploadedImageCount++;
+          }
+        }
+
+        const jsonText = await jsonFile.text();
+        const importedData = JSON.parse(jsonText);
+
+        if (!Array.isArray(importedData)) {
+          alert('無効なJSONフォーマットです。(配列形式でありません)');
+          return;
+        }
+
+        let addedCount = 0;
+        let updatedCount = 0;
+
+        for (const importedItem of importedData) {
+          if (importedItem.choice1 && importedItem.choice1.image && !importedItem.choice1.image.startsWith('http') && !importedItem.choice1.image.startsWith('data:')) {
+            const fileName = importedItem.choice1.image.split('/').pop();
+            importedItem.choice1.image = `${STORAGE_PUBLIC_URL}${fileName}`;
+          }
+          if (importedItem.choice2 && importedItem.choice2.image && !importedItem.choice2.image.startsWith('http') && !importedItem.choice2.image.startsWith('data:')) {
+            const fileName = importedItem.choice2.image.split('/').pop();
+            importedItem.choice2.image = `${STORAGE_PUBLIC_URL}${fileName}`;
           }
 
-          let addedCount = 0;
+          const importedLevel = importedItem.level || 'lv1';
 
-          for (const importedItem of importedData) {
-            const importedLevel = importedItem.level || 'lv1';
+          const isDuplicate = questions.some(existingItem => 
+            (existingItem.level || 'lv1') === importedLevel &&
+            existingItem.questionText === importedItem.questionText &&
+            existingItem.correctAnswer === importedItem.correctAnswer &&
+            (existingItem.choice1.text || '') === (importedItem.choice1.text || '') &&
+            (existingItem.choice1.image || '') === (importedItem.choice1.image || '') &&
+            (existingItem.choice2.text || '') === (importedItem.choice2.text || '') &&
+            (existingItem.choice2.image || '') === (importedItem.choice2.image || '')
+          );
 
-            const isDuplicate = questions.some(existingItem => 
-              (existingItem.level || 'lv1') === importedLevel &&
-              existingItem.questionText === importedItem.questionText &&
-              existingItem.correctAnswer === importedItem.correctAnswer &&
-              (existingItem.choice1.text || '') === (importedItem.choice1.text || '') &&
-              (existingItem.choice1.image || '') === (importedItem.choice1.image || '') &&
-              (existingItem.choice2.text || '') === (importedItem.choice2.text || '') &&
-              (existingItem.choice2.image || '') === (importedItem.choice2.image || '')
-            );
-
-            if (!isDuplicate) {
+          if (!isDuplicate) {
+            const existingIndex = questions.findIndex(q => String(q.id) === String(importedItem.id));
+            if (existingIndex !== -1) {
+              questions[existingIndex] = {
+                ...importedItem,
+                level: importedLevel,
+                created_by: currentUser ? currentUser.id : (importedItem.created_by || null)
+              };
+              updatedCount++;
+            } else {
               const recordId = importedItem.id || 'torokko_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
               const newItem = {
                 ...importedItem,
                 level: importedLevel,
                 id: recordId,
-                created_by: currentUser ? currentUser.id : null
+                created_by: currentUser ? currentUser.id : (importedItem.created_by || null)
               };
-
               questions.push(newItem);
               addedCount++;
             }
           }
-
-          // Supabaseへ保存
-          await syncAllToSupabase();
-
-          saveToLocalStorage();
-          renderQuestions();
-          alert(`読み込み完了: ${addedCount} 件の新しい問題を追加しました。(重複 ${importedData.length - addedCount} 件スキップ)`);
-        } catch (err) {
-          alert('JSONファイルの読み込みに失敗しました。ファイル形式を確認してください。');
         }
-        event.target.value = '';
-      };
-      reader.readAsText(file);
+
+        await syncAllToSupabase();
+
+        saveToLocalStorage();
+        renderQuestions();
+        alert(`インポートが完了しました！\n・新規追加: ${addedCount} 件\n・更新: ${updatedCount} 件\n・Storageアップロード画像: ${uploadedImageCount} 件`);
+      } catch (err) {
+        console.error(err);
+        alert('インポート処理に失敗しました: ' + err.message);
+      }
+      event.target.value = '';
     }
 
     function escapeHTML(str) {

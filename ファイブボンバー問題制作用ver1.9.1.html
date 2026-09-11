@@ -522,8 +522,8 @@
 
 <script>
     // Supabase 設定
-    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const SUPABASE_URL = 'https://wfddewnonkwxwlaihamn.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_RFILYcq2R5yx72AMhsh0JQ_Bfk1eZHA';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
     const BUCKET_NAME = 'five_bomber_images';
@@ -911,11 +911,22 @@
                 let imgVal = container.dataset.imageData || null;
 
                 if (container._selectedFile) {
+                    // 新しく選択されたローカルファイルをアップロード
                     const ext = container._selectedFile.name.split('.').pop() || 'jpg';
                     const fileName = `${targetId}_idx${i}.${ext}`;
                     const uploadedUrl = await uploadImageToStorage(container._selectedFile, fileName);
-                    if (uploadedUrl) {
-                        imgVal = uploadedUrl;
+                    if (uploadedUrl) imgVal = uploadedUrl;
+                } else if (imgVal && imgVal.startsWith('data:image/')) {
+                    // 既存のBase64画像がそのまま残っている場合、Blobに変換してStorageへアップロード
+                    try {
+                        const res = await fetch(imgVal);
+                        const blob = await res.blob();
+                        const ext = blob.type.split('/')[1] || 'jpg';
+                        const fileName = `${targetId}_idx${i}.${ext}`;
+                        const uploadedUrl = await uploadImageToStorage(blob, fileName);
+                        if (uploadedUrl) imgVal = uploadedUrl;
+                    } catch (err) {
+                        console.error('Base64画像変換アップロードエラー:', err);
                     }
                 }
 

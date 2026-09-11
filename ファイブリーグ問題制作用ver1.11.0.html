@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ファイブリーグ 問題制作ツール</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- ZIP操作用ライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <style>
         :root {
             --bg-color: #f0f8ff;
@@ -344,14 +347,15 @@
     </div>
 
     <div class="card">
-        <h2>データ管理 (JSON)</h2>
+        <h2>データ管理 (ZIP / JSON)</h2>
         <div class="btn-group">
-            <button class="btn btn-primary" onclick="exportJSON()">JSONで出力（ダウンロード）</button>
+            <button class="btn btn-primary" onclick="exportZIP()">ZIPで出力（JSON＋画像）</button>
             <label class="btn btn-accent" style="cursor: pointer; display: inline-block;">
-                JSONを読み込み
-                <input type="file" id="jsonFileInput" accept=".json" style="display: none;" onchange="uploadJSON(event)">
+                ZIP / JSONを読み込み
+                <input type="file" id="fileInput" accept=".zip,.json" style="display: none;" onchange="importFile(event)">
             </label>
             <button class="btn btn-secondary" onclick="fetchQuestionsFromSupabase(true)">🔄 クラウドから問題再読み込み</button>
+            <button class="btn btn-secondary" onclick="migrateBase64ToStorage()">☁️ 既存Base64画像をStorageへ移行</button>
             <button id="clearAllBtn" class="btn btn-danger" onclick="clearAllQuestions()" style="display: none;">問題データを全削除</button>
         </div>
     </div>
@@ -465,9 +469,13 @@
 
 <script>
     // --- Supabase設定 ---
-    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+    const SUPABASE_URL = 'https://wfddewnonkwxwlaihamn.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_RFILYcq2R5yx72AMhsh0JQ_Bfk1eZHA';
+    const STORAGE_BUCKET = 'five_league_images';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 管理者メールアドレス
+    const ADMIN_EMAIL = 's50251050@hiroshima-u.ed.jp';
 
     // レコード識別用ID
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
@@ -477,7 +485,6 @@
     let editingIndex = -1;
     let altAnswerCount = 0;
     let currentUser = null;
-    let isAdmin = false;
 
     window.addEventListener('DOMContentLoaded', async () => {
         renderQuestionList();
@@ -485,32 +492,59 @@
         await checkLoginStatus();
     });
 
-    // --- Supabase認証 関連 ---
-    async function checkAdminStatus(user) {
-        if (!user) return false;
+    // --- Helper Functions for Storage & Base64 ---
+    function base64ToBlob(base64Str) {
         try {
-            const { data, error } = await supabaseClient
-                .from('admin_users')
-                .select('user_id, email')
-                .eq('user_id', user.id)
-                .eq('email', user.email)
-                .maybeSingle();
-
-            if (error) {
-                console.error('Admin Check Error:', error);
-                return false;
+            const parts = base64Str.split(';base64,');
+            const contentType = parts[0].split(':')[1] || 'image/png';
+            const raw = window.atob(parts[1]);
+            const rawLength = raw.length;
+            const uInt8Array = new Uint8Array(rawLength);
+            for (let i = 0; i < rawLength; ++i) {
+                uInt8Array[i] = raw.charCodeAt(i);
             }
-            return !!data;
+            return new Blob([uInt8Array], { type: contentType });
         } catch (e) {
-            console.error('Admin Check Exception:', e);
-            return false;
+            console.error("Base64 conversion error", e);
+            return null;
         }
     }
 
+    async function uploadBase64ToStorage(base64Data, folder = 'general') {
+        if (!base64Data || !base64Data.startsWith('data:image')) return base64Data;
+        const blob = base64ToBlob(base64Data);
+        if (!blob) return base64Data;
+
+        const ext = blob.type.split('/')[1] || 'png';
+        const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+
+        const { data, error } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(fileName, blob, {
+            contentType: blob.type,
+            upsert: true
+        });
+
+        if (error) {
+            console.error('Storage Upload Error:', error);
+            throw error;
+        }
+
+        const { data: publicUrlData } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(fileName);
+        return publicUrlData.publicUrl;
+    }
+
+    async function fileToDataURL(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // --- Supabase認証 関連 ---
     async function checkLoginStatus() {
         const { data: { user } } = await supabaseClient.auth.getUser();
         currentUser = user;
-        isAdmin = await checkAdminStatus(currentUser);
         renderAuthUI();
 
         if (currentUser) {
@@ -526,6 +560,7 @@
         if (!container) return;
 
         if (currentUser) {
+            const isAdmin = currentUser.email === ADMIN_EMAIL;
             container.innerHTML = `
                 <div class="auth-badge status-online">🟢 ログイン中 (${escapeHTML(currentUser.email)}${isAdmin ? ' / 管理者' : ''})</div>
                 <p style="font-size:0.85rem; color:#666; margin-bottom:10px;">クラウド同期が有効です。問題の閲覧・追加・編集が可能です。</p>
@@ -563,7 +598,6 @@
             alert("ログインに失敗しました: " + error.message);
         } else {
             currentUser = data.user;
-            isAdmin = await checkAdminStatus(currentUser);
             alert("ログインに成功しました。");
             renderAuthUI();
             await fetchQuestionsFromSupabase();
@@ -573,183 +607,223 @@
     async function logoutFromSupabase() {
         await supabaseClient.auth.signOut();
         currentUser = null;
-        isAdmin = false;
         alert("ログアウトしました。");
         renderAuthUI();
         renderQuestionList();
     }
 
- // 直近で同期した際のスナップショット（同時編集時の差分マージ用）
-let questionsSnapshot = new Map();
-let bgImagesSnapshot = new Set();
+    // 直近で同期した際のスナップショット
+    let questionsSnapshot = new Map();
+    let bgImagesSnapshot = new Set();
 
-// Supabaseからデータ取得 (quiz_data テーブルの five_league カラム使用)
-async function fetchQuestionsFromSupabase(isManual = false) {
-    const statusEl = document.getElementById('syncStatus');
-    statusEl.innerText = '☁️ Supabaseからデータを読み込み中...';
+    // Supabaseからデータ取得
+    async function fetchQuestionsFromSupabase(isManual = false) {
+        const statusEl = document.getElementById('syncStatus');
+        statusEl.innerText = '☁️ Supabaseからデータを読み込み中...';
 
-    try {
-        const { data, error } = await supabaseClient
-            .from('quiz_data')
-            .select('five_league')
-            .eq('id', QUIZ_DATA_ROW_ID)
-            .single();
+        try {
+            const { data, error } = await supabaseClient
+                .from('quiz_data')
+                .select('five_league')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .single();
 
-        if (error && error.code !== 'PGRST116') {
-            console.error('Fetch Error:', error);
-            statusEl.innerText = '⚠️ クラウドデータの読み込みに失敗しました';
-            if (isManual) alert("データの取得に失敗しました: " + error.message);
-            return;
-        }
+            if (error && error.code !== 'PGRST116') {
+                console.error('Fetch Error:', error);
+                statusEl.innerText = '⚠️ クラウドデータの読み込みに失敗しました';
+                if (isManual) alert("データの取得に失敗しました: " + error.message);
+                return;
+            }
 
-        if (data && data.five_league) {
-            questions = data.five_league.questions || [];
-            bgImages = data.five_league.bgImages || [];
-            statusEl.innerText = '🟢 クラウドと正常に同期されています';
-            if (isManual) alert("クラウドから最新の問題を取得しました。");
-        } else {
-            questions = [];
-            bgImages = [];
-            statusEl.innerText = '🟢 新規データ（クラウド同期準備完了）';
-            if (isManual) alert("クラウドに保存された問題はありませんでした。");
-        }
-
-        // 差分比較用のスナップショットを更新
-        questionsSnapshot.clear();
-        questions.forEach(q => {
-            if (q.id) questionsSnapshot.set(q.id, JSON.stringify(q));
-        });
-        bgImagesSnapshot = new Set(bgImages);
-
-        renderQuestionList();
-        renderBgImageList();
-    } catch (e) {
-        console.error('Supabase load error:', e);
-        statusEl.innerText = '⚠️ 通信エラーが発生しました';
-    }
-}
-
-// Supabaseへデータ保存（競合回避・マージ処理付き）
-async function saveToSupabase() {
-    if (!currentUser) return true;
-
-    const statusEl = document.getElementById('syncStatus');
-    statusEl.innerText = '☁️ クラウドへ保存中...';
-
-    try {
-        // 1. 保存直前にクラウドの最新データを取得
-        const { data: remoteData, error: fetchErr } = await supabaseClient
-            .from('quiz_data')
-            .select('five_league')
-            .eq('id', QUIZ_DATA_ROW_ID)
-            .single();
-
-        let cloudQuestions = (remoteData && remoteData.five_league && remoteData.five_league.questions) ? remoteData.five_league.questions : [];
-        let cloudBgImages = (remoteData && remoteData.five_league && remoteData.five_league.bgImages) ? remoteData.five_league.bgImages : [];
-
-        // 2. 問題データ（questions）のマージ処理
-        const localQuestionsMap = new Map();
-        questions.forEach(q => {
-            if (q.id) localQuestionsMap.set(q.id, q);
-        });
-
-        const mergedQuestionsMap = new Map();
-
-        // (A) クラウドにある問題を走査
-        cloudQuestions.forEach(cq => {
-            if (!cq.id) return;
-            const cqId = cq.id;
-
-            if (localQuestionsMap.has(cqId)) {
-                // 自分の手元にも存在する問題の場合
-                const localQ = localQuestionsMap.get(cqId);
-                const snapshotStr = questionsSnapshot.get(cqId);
-                const localStr = JSON.stringify(localQ);
-
-                if (snapshotStr && localStr !== snapshotStr) {
-                    // 自分が手元で編集した場合 -> 自分の編集内容を採用
-                    mergedQuestionsMap.set(cqId, localQ);
-                } else {
-                    // 自分は編集していない場合 -> 他人の編集・クラウドの内容を採用
-                    mergedQuestionsMap.set(cqId, cq);
-                }
+            if (data && data.five_league) {
+                questions = data.five_league.questions || [];
+                bgImages = data.five_league.bgImages || [];
+                statusEl.innerText = '🟢 クラウドと正常に同期されています';
+                if (isManual) alert("クラウドから最新の問題を取得しました。");
             } else {
-                // 手元に存在しない問題の場合
-                if (questionsSnapshot.has(cqId)) {
-                    // 以前は存在していたが、自分が意図的に削除した場合 -> 削除状態を維持
-                } else {
-                    // 自分が読み込んだ後に他人が新規追加した問題の場合 -> 残す
-                    mergedQuestionsMap.set(cqId, cq);
-                }
+                questions = [];
+                bgImages = [];
+                statusEl.innerText = '🟢 新規データ（クラウド同期準備完了）';
+                if (isManual) alert("クラウドに保存された問題はありませんでした。");
             }
-        });
-
-        // (B) クラウドになく、自分の手元で新規作成された問題を走査
-        questions.forEach(lq => {
-            if (lq.id && !mergedQuestionsMap.has(lq.id)) {
-                if (!questionsSnapshot.has(lq.id)) {
-                    // 自分が新規追加した問題 -> 追加
-                    mergedQuestionsMap.set(lq.id, lq);
-                }
-            }
-        });
-
-        const mergedQuestions = Array.from(mergedQuestionsMap.values());
-
-        // 3. 背景画像（bgImages）のマージ処理
-        const mergedBgImagesSet = new Set(cloudBgImages);
-        // 自分が追加した背景画像を維持
-        bgImages.forEach(img => mergedBgImagesSet.add(img));
-        // 自分が削除した背景画像をクラウド側からも削除
-        bgImagesSnapshot.forEach(img => {
-            if (!bgImages.includes(img)) {
-                mergedBgImagesSet.delete(img);
-            }
-        });
-        const mergedBgImages = Array.from(mergedBgImagesSet);
-
-        // 4. マージ後のデータをSupabaseへ上書き保存
-        const payload = {
-            questions: mergedQuestions,
-            bgImages: mergedBgImages
-        };
-
-        const { error } = await supabaseClient
-            .from('quiz_data')
-            .upsert({
-                id: QUIZ_DATA_ROW_ID,
-                five_league: payload,
-                created_by: currentUser.id
-            }, { onConflict: 'id' });
-
-        if (error) {
-            console.error('Supabase Save Error:', error);
-            statusEl.innerText = '❌ クラウドへの保存に失敗しました';
-            alert("クラウドへの保存に失敗しました: " + error.message);
-            return false;
-        } else {
-            // 保存成功後、自分の手元のデータ・スナップショット・画面表示を更新
-            questions = mergedQuestions;
-            bgImages = mergedBgImages;
 
             questionsSnapshot.clear();
             questions.forEach(q => {
                 if (q.id) questionsSnapshot.set(q.id, JSON.stringify(q));
             });
-            bgImagesSnapshot = new Set(bgImages);
+            bgImagesSnapshot = new Set(bgImages.map(bg => typeof bg === 'string' ? bg : bg.url));
 
             renderQuestionList();
             renderBgImageList();
-
-            statusEl.innerText = '🟢 クラウドへ正常に保存されました！';
-            return true;
+        } catch (e) {
+            console.error('Supabase load error:', e);
+            statusEl.innerText = '⚠️ 通信エラーが発生しました';
         }
-    } catch (e) {
-        console.error('Supabase Save Exception:', e);
-        statusEl.innerText = '❌ 保存中に例外が発生しました';
-        return false;
     }
-}
+
+    // Supabaseへデータ保存
+    async function saveToSupabase() {
+        if (!currentUser) return true;
+
+        const statusEl = document.getElementById('syncStatus');
+        statusEl.innerText = '☁️ クラウドへ保存中...';
+
+        try {
+            const { data: remoteData } = await supabaseClient
+                .from('quiz_data')
+                .select('five_league')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .single();
+
+            let cloudQuestions = (remoteData && remoteData.five_league && remoteData.five_league.questions) ? remoteData.five_league.questions : [];
+            let cloudBgImages = (remoteData && remoteData.five_league && remoteData.five_league.bgImages) ? remoteData.five_league.bgImages : [];
+
+            const localQuestionsMap = new Map();
+            questions.forEach(q => {
+                if (q.id) localQuestionsMap.set(q.id, q);
+            });
+
+            const mergedQuestionsMap = new Map();
+
+            cloudQuestions.forEach(cq => {
+                if (!cq.id) return;
+                const cqId = cq.id;
+
+                if (localQuestionsMap.has(cqId)) {
+                    const localQ = localQuestionsMap.get(cqId);
+                    const snapshotStr = questionsSnapshot.get(cqId);
+                    const localStr = JSON.stringify(localQ);
+
+                    if (snapshotStr && localStr !== snapshotStr) {
+                        mergedQuestionsMap.set(cqId, localQ);
+                    } else {
+                        mergedQuestionsMap.set(cqId, cq);
+                    }
+                } else {
+                    if (!questionsSnapshot.has(cqId)) {
+                        mergedQuestionsMap.set(cqId, cq);
+                    }
+                }
+            });
+
+            questions.forEach(lq => {
+                if (lq.id && !mergedQuestionsMap.has(lq.id)) {
+                    if (!questionsSnapshot.has(lq.id)) {
+                        mergedQuestionsMap.set(lq.id, lq);
+                    }
+                }
+            });
+
+            const mergedQuestions = Array.from(mergedQuestionsMap.values());
+
+            const mergedBgImagesSet = new Map();
+            cloudBgImages.forEach(img => {
+                const key = typeof img === 'string' ? img : img.url;
+                mergedBgImagesSet.set(key, img);
+            });
+            bgImages.forEach(img => {
+                const key = typeof img === 'string' ? img : img.url;
+                mergedBgImagesSet.set(key, img);
+            });
+            bgImagesSnapshot.forEach(key => {
+                const existsLocally = bgImages.some(img => (typeof img === 'string' ? img : img.url) === key);
+                if (!existsLocally) {
+                    mergedBgImagesSet.delete(key);
+                }
+            });
+            const mergedBgImages = Array.from(mergedBgImagesSet.values());
+
+            const payload = {
+                questions: mergedQuestions,
+                bgImages: mergedBgImages
+            };
+
+            const { error } = await supabaseClient
+                .from('quiz_data')
+                .upsert({
+                    id: QUIZ_DATA_ROW_ID,
+                    five_league: payload,
+                    created_by: currentUser.id
+                }, { onConflict: 'id' });
+
+            if (error) {
+                console.error('Supabase Save Error:', error);
+                statusEl.innerText = '❌ クラウドへの保存に失敗しました';
+                alert("クラウドへの保存に失敗しました: " + error.message);
+                return false;
+            } else {
+                questions = mergedQuestions;
+                bgImages = mergedBgImages;
+
+                questionsSnapshot.clear();
+                questions.forEach(q => {
+                    if (q.id) questionsSnapshot.set(q.id, JSON.stringify(q));
+                });
+                bgImagesSnapshot = new Set(bgImages.map(bg => typeof bg === 'string' ? bg : bg.url));
+
+                renderQuestionList();
+                renderBgImageList();
+
+                statusEl.innerText = '🟢 クラウドへ正常に保存されました！';
+                return true;
+            }
+        } catch (e) {
+            console.error('Supabase Save Exception:', e);
+            statusEl.innerText = '❌ 保存中に例外が発生しました';
+            return false;
+        }
+    }
+
+    // 既存Base64画像のStorage移行機能
+    async function migrateBase64ToStorage() {
+        if (!currentUser) {
+            alert("この操作を行うにはログインが必要です。");
+            return;
+        }
+
+        const statusEl = document.getElementById('syncStatus');
+        statusEl.innerText = '☁️ Base64画像をStorageへ一括移行中...';
+
+        let count = 0;
+        try {
+            for (let q of questions) {
+                if (q.preImage && q.preImage.startsWith('data:image')) {
+                    q.preImage = await uploadBase64ToStorage(q.preImage, 'questions');
+                    count++;
+                }
+                if (q.postImage && q.postImage.startsWith('data:image')) {
+                    q.postImage = await uploadBase64ToStorage(q.postImage, 'questions');
+                    count++;
+                }
+            }
+
+            for (let i = 0; i < bgImages.length; i++) {
+                let bg = bgImages[i];
+                let urlStr = typeof bg === 'string' ? bg : bg.url;
+                if (urlStr && urlStr.startsWith('data:image')) {
+                    const uploadedUrl = await uploadBase64ToStorage(urlStr, 'backgrounds');
+                    if (typeof bg === 'string') {
+                        bgImages[i] = uploadedUrl;
+                    } else {
+                        bgImages[i].url = uploadedUrl;
+                    }
+                    count++;
+                }
+            }
+
+            if (count > 0) {
+                await saveToSupabase();
+                alert(`${count} 件のBase64画像をStorageへ移行し、URLに置き換えました。`);
+            } else {
+                alert("移行が必要なBase64画像はありませんでした。");
+                statusEl.innerText = '🟢 クラウドと正常に同期されています';
+            }
+        } catch (e) {
+            console.error("Migration Error:", e);
+            alert("移行中にエラーが発生しました: " + e.message);
+            statusEl.innerText = '❌ 移行エラー';
+        }
+    }
 
     function toHalfWidth(str) {
         return str.replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0));
@@ -832,7 +906,7 @@ async function saveToSupabase() {
                 <div class="five-inputs-container">
                     <div class="five-inputs-box"><span>1人目</span><input type="text" class="alt-furi-${id}" id="alt_furi_${id}_0" value="${furiVal[0]||''}" onchange="handleFuriInput(this)"></div>
                     <div class="five-inputs-box"><span>2人目</span><input type="text" class="alt-furi-${id}" id="alt_furi_${id}_1" value="${furiVal[1]||''}" onchange="handleFuriInput(this)"></div>
-                    <div class="five-inputs-box"><span>2人目</span><input type="text" class="alt-furi-${id}" id="alt_furi_${id}_2" value="${furiVal[2]||''}" onchange="handleFuriInput(this)"></div>
+                    <div class="five-inputs-box"><span>3人目</span><input type="text" class="alt-furi-${id}" id="alt_furi_${id}_2" value="${furiVal[2]||''}" onchange="handleFuriInput(this)"></div>
                     <div class="five-inputs-box"><span>4人目</span><input type="text" class="alt-furi-${id}" id="alt_furi_${id}_3" value="${furiVal[3]||''}" onchange="handleFuriInput(this)"></div>
                     <div class="five-inputs-box"><span>5人目</span><input type="text" class="alt-furi-${id}" id="alt_furi_${id}_4" value="${furiVal[4]||''}" onchange="handleFuriInput(this)"></div>
                 </div>
@@ -886,7 +960,7 @@ async function saveToSupabase() {
                 return;
             }
         }
-        const furigana = furiChars; // 配列で保存して枠ごとの割り当て情報を保持
+        const furigana = furiChars;
 
         const altBlocks = document.querySelectorAll('#altAnswersContainer .answer-block');
         let altAnswers = [];
@@ -923,6 +997,31 @@ async function saveToSupabase() {
         const preImgPreview = document.getElementById('preImagePreview');
         const postImgPreview = document.getElementById('postImagePreview');
 
+        let preImageUrl = preImgPreview.src;
+        let postImageUrl = postImgPreview.src;
+
+        if (preImageUrl.startsWith('data:image')) {
+            try {
+                preImageUrl = await uploadBase64ToStorage(preImageUrl, 'questions');
+            } catch (e) {
+                alert("回答前画像のアップロードに失敗しました。");
+                return;
+            }
+        } else if (!preImgPreview.style.display || preImgPreview.style.display === 'none') {
+            preImageUrl = '';
+        }
+
+        if (postImageUrl.startsWith('data:image')) {
+            try {
+                postImageUrl = await uploadBase64ToStorage(postImageUrl, 'questions');
+            } catch (e) {
+                alert("回答後画像のアップロードに失敗しました。");
+                return;
+            }
+        } else if (!postImgPreview.style.display || postImgPreview.style.display === 'none') {
+            postImageUrl = '';
+        }
+
         const recordId = (editingIndex >= 0 && questions[editingIndex].id) 
             ? questions[editingIndex].id 
             : 'five_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
@@ -940,8 +1039,8 @@ async function saveToSupabase() {
             altAnswers,
             altFuriganas,
             charTypes,
-            preImage: preImgPreview.src.startsWith('data:image') ? preImgPreview.src : '',
-            postImage: postImgPreview.src.startsWith('data:image') ? postImgPreview.src : '',
+            preImage: preImageUrl,
+            postImage: postImageUrl,
             created_by: createdBy
         };
 
@@ -993,7 +1092,6 @@ async function saveToSupabase() {
 
         const mainChars = (q.mainAnswer || '').split('');
         
-        // 配列データと文字列データ両方の互換処理
         let furiChars = [];
         if (Array.isArray(q.furigana)) {
             furiChars = q.furigana;
@@ -1051,17 +1149,14 @@ async function saveToSupabase() {
         const searchInput = document.getElementById('searchInput');
         const keyword = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
-        // キーワードによるフィルタリング処理
         let filteredQuestions = questions.filter(q => {
             if (!keyword) return true;
 
-            // 全角数字を半角数字に変換して比較用数値文字列を準備
             const normalizedKeyword = toHalfWidth(keyword).replace(/[^0-9]/g, '');
 
             const originalIndex = questions.indexOf(q);
-            const questionNum = (originalIndex + 1).toString(); // 登録順（1ベースの数字）
+            const questionNum = (originalIndex + 1).toString();
 
-            // 数字のみで一致するかチェック（「1」「第1問」「no.1」等に対応）
             const matchesNumber = normalizedKeyword !== '' && questionNum === normalizedKeyword;
 
             const qText = (q.questionText || '').toLowerCase();
@@ -1093,7 +1188,6 @@ async function saveToSupabase() {
                    altFuriStr.includes(keyword);
         });
 
-        // 件数表示の更新
         if (keyword) {
             countEl.innerText = `${filteredQuestions.length} 件 (全${questions.length}件中)`;
         } else {
@@ -1110,7 +1204,6 @@ async function saveToSupabase() {
         listEl.innerHTML = '';
 
         filteredQuestions.forEach((q) => {
-            // 元のquestions配列内でのインデックスを取得（編集・削除のため）
             const originalIndex = questions.indexOf(q);
 
             const item = document.createElement('div');
@@ -1142,9 +1235,8 @@ async function saveToSupabase() {
             const preBadge = q.preImage ? '<span class="tag" style="background:#fff3e0; color:#e65100;">回答前画像あり</span>' : '';
             const postBadge = q.postImage ? '<span class="tag" style="background:#f3e5f5; color:#7b1fa2;">回答後画像あり</span>' : '';
 
-            // 削除ボタン権限判定（管理者または制作者本人のみ）
             const canDelete = currentUser && (
-                isAdmin ||
+                currentUser.email === ADMIN_EMAIL ||
                 (q.created_by && q.created_by === currentUser.id)
             );
 
@@ -1185,27 +1277,29 @@ async function saveToSupabase() {
         img.style.display = 'none';
     }
 
-    function addBgImage() {
+    async function addBgImage() {
         const input = document.getElementById('bgFileInput');
         if (input.files && input.files[0]) {
             const files = Array.from(input.files);
-            let loaded = 0;
-            files.forEach(file => {
-                const reader = new FileReader();
-                reader.onload = async (e) => {
+            const statusEl = document.getElementById('syncStatus');
+            statusEl.innerText = '☁️ 背景画像をアップロード中...';
+
+            try {
+                for (let file of files) {
+                    const base64 = await fileToDataURL(file);
+                    const publicUrl = await uploadBase64ToStorage(base64, 'backgrounds');
                     bgImages.push({
                         name: file.name,
-                        url: e.target.result
+                        url: publicUrl
                     });
-                    loaded++;
-                    if (loaded === files.length) {
-                        await saveToSupabase();
-                        renderBgImageList();
-                        input.value = '';
-                    }
-                };
-                reader.readAsDataURL(file);
-            });
+                }
+                await saveToSupabase();
+                renderBgImageList();
+                input.value = '';
+            } catch (e) {
+                alert('背景画像のアップロードに失敗しました。');
+                console.error(e);
+            }
         }
     }
 
@@ -1232,10 +1326,13 @@ async function saveToSupabase() {
         bgImages.forEach((bg, index) => {
             const card = document.createElement('div');
             card.className = 'bg-card';
+            const name = typeof bg === 'string' ? '背景画像' : (bg.name || '背景画像');
+            const url = typeof bg === 'string' ? bg : bg.url;
+
             card.innerHTML = `
-                <img src="${bg.url}" alt="${escapeHTML(bg.name)}">
+                <img src="${url}" alt="${escapeHTML(name)}">
                 <div class="bg-card-body">
-                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px;" title="${escapeHTML(bg.name)}">${escapeHTML(bg.name)}</span>
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px;" title="${escapeHTML(name)}">${escapeHTML(name)}</span>
                     <button class="btn btn-danger" onclick="deleteBgImage(${index})">削除</button>
                 </div>
             `;
@@ -1246,7 +1343,7 @@ async function saveToSupabase() {
     async function deleteQuestion(index) {
         const q = questions[index];
         const canDelete = currentUser && (
-            isAdmin ||
+            currentUser.email === ADMIN_EMAIL ||
             (q.created_by && q.created_by === currentUser.id)
         );
 
@@ -1268,8 +1365,7 @@ async function saveToSupabase() {
     }
 
     async function clearAllQuestions() {
-        // 管理者チェック
-        if (!currentUser || !isAdmin) {
+        if (!currentUser || currentUser.email !== ADMIN_EMAIL) {
             alert('一括削除は管理者のみ可能です。');
             return;
         }
@@ -1278,14 +1374,12 @@ async function saveToSupabase() {
             return;
         }
 
-        // 確認用パスワード入力
         const password = prompt('安全のため、管理者のログインパスワードを入力してください:');
         if (!password) {
             alert('削除をキャンセルしました。');
             return;
         }
 
-        // パスワード認証による本人確認
         const { error } = await supabaseClient.auth.signInWithPassword({
             email: currentUser.email,
             password: password
@@ -1296,7 +1390,6 @@ async function saveToSupabase() {
             return;
         }
 
-        // 認証成功時に全削除実行
         questions = [];
         const success = await saveToSupabase();
         if (success) {
@@ -1306,86 +1399,198 @@ async function saveToSupabase() {
         }
     }
 
-    function exportJSON() {
+    // --- エクスポート（ZIP形式） ---
+    async function exportZIP() {
         if (questions.length === 0 && bgImages.length === 0) {
             alert('エクスポートするデータがありません。');
             return;
         }
 
+        const zip = new JSZip();
+        const imgFolder = zip.folder("images");
+
+        const exportQuestions = JSON.parse(JSON.stringify(questions));
+        const exportBgImages = JSON.parse(JSON.stringify(bgImages));
+
+        let imgIndex = 0;
+
+        async function processImageURL(url) {
+            if (!url) return '';
+            try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const ext = blob.type.split('/')[1] || 'png';
+                const filename = `img_${Date.now()}_${imgIndex++}.${ext}`;
+                imgFolder.file(filename, blob);
+                return `images/${filename}`;
+            } catch (e) {
+                console.error("Image Fetch Error:", e);
+                return url;
+            }
+        }
+
+        for (let q of exportQuestions) {
+            if (q.preImage) q.preImage = await processImageURL(q.preImage);
+            if (q.postImage) q.postImage = await processImageURL(q.postImage);
+        }
+
+        for (let i = 0; i < exportBgImages.length; i++) {
+            let bg = exportBgImages[i];
+            let urlStr = typeof bg === 'string' ? bg : bg.url;
+            if (urlStr) {
+                const localPath = await processImageURL(urlStr);
+                if (typeof bg === 'string') {
+                    exportBgImages[i] = localPath;
+                } else {
+                    exportBgImages[i].url = localPath;
+                }
+            }
+        }
+
         const exportData = {
-            questions: questions,
-            bgImages: bgImages
+            questions: exportQuestions,
+            bgImages: exportBgImages
         };
 
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-        const downloadAnchor = document.createElement('a');
-        downloadAnchor.setAttribute("href", dataStr);
-        downloadAnchor.setAttribute("download", `five_league_data_${new Date().toISOString().slice(0,10)}.json`);
-        document.body.appendChild(downloadAnchor);
-        downloadAnchor.click();
-        downloadAnchor.remove();
+        zip.file("data.json", JSON.stringify(exportData, null, 2));
+
+        const content = await zip.generateAsync({ type: "blob" });
+        saveAs(content, `five_league_data_${new Date().toISOString().slice(0,10)}.zip`);
     }
 
-    function uploadJSON(event) {
+    // --- インポート（ZIP / JSON形式対応） ---
+    async function importFile(event) {
         const file = event.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const imported = JSON.parse(e.target.result);
-                let importedQuestions = [];
-                let importedBgImages = [];
+        const statusEl = document.getElementById('syncStatus');
+        statusEl.innerText = '☁️ ファイルを取り込み中...';
 
-                if (Array.isArray(imported)) {
-                    importedQuestions = imported;
-                } else if (typeof imported === 'object' && imported !== null) {
-                    importedQuestions = imported.questions || [];
-                    importedBgImages = imported.bgImages || [];
+        try {
+            if (file.name.endsWith('.zip')) {
+                const zip = await JSZip.loadAsync(file);
+                const jsonFile = zip.file("data.json");
+                if (!jsonFile) {
+                    alert("ZIP内に data.json が見つかりませんでした。");
+                    return;
+                }
+                const jsonText = await jsonFile.async("text");
+                const imported = JSON.parse(jsonText);
+
+                let importedQuestions = imported.questions || [];
+                let importedBgImages = imported.bgImages || [];
+
+                async function restoreImage(path) {
+                    if (!path) return '';
+                    if (!path.startsWith('images/')) return path;
+                    const imgFile = zip.file(path);
+                    if (!imgFile) return '';
+                    const blob = await imgFile.async("blob");
+                    const base64 = await new Promise(resolve => {
+                        const reader = new FileReader();
+                        reader.onload = e => resolve(e.target.result);
+                        reader.readAsDataURL(blob);
+                    });
+                    return await uploadBase64ToStorage(base64, 'imported');
                 }
 
-                let bgUpdated = false;
-                if (importedBgImages && Array.isArray(importedBgImages) && importedBgImages.length > 0) {
-                    bgImages = importedBgImages;
-                    bgUpdated = true;
+                for (let q of importedQuestions) {
+                    if (q.preImage) q.preImage = await restoreImage(q.preImage);
+                    if (q.postImage) q.postImage = await restoreImage(q.postImage);
                 }
 
-                let addedCount = 0;
-                let duplicateCount = 0;
-
-                importedQuestions.forEach(item => {
-                    const isDuplicate = questions.some(existing => 
-                        existing.questionText === item.questionText && 
-                        existing.mainAnswer === item.mainAnswer
-                    );
-
-                    if (!isDuplicate) {
-                        if (!item.difficulty) item.difficulty = 1;
-                        if (!item.id) item.id = 'five_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-                        item.created_by = currentUser ? currentUser.id : null;
-                        questions.push(item);
-                        addedCount++;
-                    } else {
-                        duplicateCount++;
+                for (let i = 0; i < importedBgImages.length; i++) {
+                    let bg = importedBgImages[i];
+                    let urlStr = typeof bg === 'string' ? bg : bg.url;
+                    if (urlStr) {
+                        const uploadedUrl = await restoreImage(urlStr);
+                        if (typeof bg === 'string') {
+                            importedBgImages[i] = uploadedUrl;
+                        } else {
+                            importedBgImages[i].url = uploadedUrl;
+                        }
                     }
-                });
-
-                await saveToSupabase();
-                renderQuestionList();
-                renderBgImageList();
-
-                let message = `取り込み完了: 問題${addedCount}件追加、${duplicateCount}件の重複をスキップしました。`;
-                if (bgUpdated) {
-                    message += `\n背景画像リスト（${bgImages.length}枚）を新しいデータに更新しました。`;
                 }
-                alert(message);
-            } catch (err) {
-                alert('JSONファイルの読み込みに失敗しました。');
-                console.error(err);
+
+                await processImportedData(importedQuestions, importedBgImages);
+
+            } else if (file.name.endsWith('.json')) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const imported = JSON.parse(e.target.result);
+                    let importedQuestions = Array.isArray(imported) ? imported : (imported.questions || []);
+                    let importedBgImages = Array.isArray(imported) ? [] : (imported.bgImages || []);
+
+                    for (let q of importedQuestions) {
+                        if (q.preImage && q.preImage.startsWith('data:image')) {
+                            q.preImage = await uploadBase64ToStorage(q.preImage, 'questions');
+                        }
+                        if (q.postImage && q.postImage.startsWith('data:image')) {
+                            q.postImage = await uploadBase64ToStorage(q.postImage, 'questions');
+                        }
+                    }
+
+                    for (let i = 0; i < importedBgImages.length; i++) {
+                        let bg = importedBgImages[i];
+                        let urlStr = typeof bg === 'string' ? bg : bg.url;
+                        if (urlStr && urlStr.startsWith('data:image')) {
+                            const uploadedUrl = await uploadBase64ToStorage(urlStr, 'backgrounds');
+                            if (typeof bg === 'string') {
+                                importedBgImages[i] = uploadedUrl;
+                            } else {
+                                importedBgImages[i].url = uploadedUrl;
+                            }
+                        }
+                    }
+
+                    await processImportedData(importedQuestions, importedBgImages);
+                };
+                reader.readAsText(file);
             }
-        };
-        reader.readAsText(file);
+        } catch (err) {
+            alert('ファイルの読み込みに失敗しました。');
+            console.error(err);
+            statusEl.innerText = '❌ インポートエラー';
+        }
         event.target.value = '';
+    }
+
+    async function processImportedData(importedQuestions, importedBgImages) {
+        let bgUpdated = false;
+        if (importedBgImages && Array.isArray(importedBgImages) && importedBgImages.length > 0) {
+            bgImages = importedBgImages;
+            bgUpdated = true;
+        }
+
+        let addedCount = 0;
+        let duplicateCount = 0;
+
+        importedQuestions.forEach(item => {
+            const isDuplicate = questions.some(existing => 
+                existing.questionText === item.questionText && 
+                existing.mainAnswer === item.mainAnswer
+            );
+
+            if (!isDuplicate) {
+                if (!item.difficulty) item.difficulty = 1;
+                if (!item.id) item.id = 'five_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                item.created_by = currentUser ? currentUser.id : null;
+                questions.push(item);
+                addedCount++;
+            } else {
+                duplicateCount++;
+            }
+        });
+
+        await saveToSupabase();
+        renderQuestionList();
+        renderBgImageList();
+
+        let message = `取り込み完了: 問題${addedCount}件追加、${duplicateCount}件の重複をスキップしました。`;
+        if (bgUpdated) {
+            message += `\n背景画像リスト（${bgImages.length}枚）を新しいデータに更新しました。`;
+        }
+        alert(message);
     }
 
     function escapeHTML(str) {

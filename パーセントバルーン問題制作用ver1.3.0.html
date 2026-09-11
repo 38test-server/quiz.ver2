@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>パーセントバルーン クイズ問題制作ツール</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         :root {
             --primary-color: #4a90e2;
@@ -94,6 +95,7 @@
         .btn-danger { background-color: var(--danger-color); }
         .btn-success { background-color: var(--success-color); }
         .btn-secondary { background-color: #7f8c8d; }
+        .btn-warning { background-color: #f39c12; color: white; }
 
         .image-preview {
             max-width: 200px;
@@ -200,13 +202,15 @@
     <div class="card">
         <h2>💾 データの保存・読み込み（共同制作対応）</h2>
         <p style="font-size: 0.9em; color: #666;">
-            ※JSONファイルをインポートする際、既存の問題文と完全に一致するもの、および既に存在する全体背景画像は上書きされず、新要素のみが追記されます。
+            ※JSON/ZIPファイルをインポートする際、既存の問題文と完全に一致するもの、および既に存在する全体背景画像は上書きされず、新要素のみが追記されます。
         </p>
         <div class="file-actions">
-            <button class="btn btn-success" onclick="exportJSON()">JSONファイルをダウンロード</button>
-            <input type="file" id="importFile" accept=".json" style="display:none;" onchange="importJSON(this)">
-            <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">JSONファイルをアップロード (追加マージ)</button>
+            <button class="btn btn-success" onclick="exportData('zip')">ZIP形式でエクスポート</button>
+            <button class="btn btn-secondary" onclick="exportData('json')">JSON単体でダウンロード</button>
+            <input type="file" id="importFile" accept=".json,.zip" style="display:none;" onchange="importData(this)">
+            <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">ZIP / JSONを読み込み (追加マージ)</button>
             <button class="btn btn-secondary" onclick="fetchQuestionsFromSupabase(true)">🔄 クラウドから問題再読み込み</button>
+            <button class="btn btn-warning" onclick="migrateBase64ToStorage()">☁️ 既存Base64画像をStorageへ移行</button>
         </div>
     </div>
 
@@ -269,12 +273,12 @@
 </div>
 
 <script>
-    // --- Supabaseの設定 ---
-    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
+     // --- Supabaseの設定 ---
+    const SUPABASE_URL = 'https://wfddewnonkwxwlaihamn.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_RFILYcq2R5yx72AMhsh0JQ_Bfk1eZHA';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // quiz_data テーブル内の ID
+    const STORAGE_BUCKET = 'balloon_images';
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
 
     // データ構造
@@ -283,19 +287,60 @@
         questions: []
     };
 
-    // 差分検知用スナップショット (複数人同時編集・競合回避用)
+    // 差分検知用スナップショット
     let questionsSnapshot = new Map();
     let globalBgSnapshot = new Set();
 
-    // 編集時の一時画像キャッシュ
-    let currentQImageBase64 = null;
-    let currentBgImageBase64 = null;
+    // 編集時の一時画像データ（URLまたはBase64）
+    let currentQImageVal = null;
+    let currentBgImageVal = null;
 
     // 認証ユーザー状態
     let currentUser = null;
     let isUserAdmin = false;
 
-    // 管理者判定関数 (admin_users テーブルを参照)
+    // --- Utility: Base64 -> Blob 変換 ---
+    function base64ToBlob(base64Data) {
+        try {
+            const parts = base64Data.split(';base64,');
+            const contentType = parts[0].split(':')[1];
+            const raw = window.atob(parts[1]);
+            const rawLength = raw.length;
+            const uInt8Array = new Uint8Array(rawLength);
+            for (let i = 0; i < rawLength; ++i) {
+                uInt8Array[i] = raw.charCodeAt(i);
+            }
+            return new Blob([uInt8Array], { type: contentType });
+        } catch (e) {
+            console.error("Blob変換エラー:", e);
+            return null;
+        }
+    }
+
+    // --- Supabase Storage アップロード関数 ---
+    async function uploadBase64ToStorage(base64Data, folder = 'general') {
+        if (!base64Data || !base64Data.startsWith('data:image')) return base64Data;
+        const blob = base64ToBlob(base64Data);
+        if (!blob) return base64Data;
+
+        const ext = blob.type.split('/')[1] || 'png';
+        const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+
+        const { data, error } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(fileName, blob, {
+            contentType: blob.type,
+            upsert: true
+        });
+
+        if (error) {
+            console.error('Storage Upload Error:', error);
+            throw error;
+        }
+
+        const { data: publicUrlData } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(fileName);
+        return publicUrlData.publicUrl;
+    }
+
+    // 管理者判定関数
     async function checkIsAdmin(user) {
         if (!user) return false;
         try {
@@ -316,7 +361,7 @@
         }
     }
 
-    // 初期化（LocalStorageからの読み込み & Supabase状態確認）
+    // 初期化
     window.onload = async function() {
         loadFromLocalStorage();
         renderGlobalBackgrounds();
@@ -335,7 +380,6 @@
             isUserAdmin = false;
         }
         renderAuthUI();
-        // ログイン状態確定後に問題リストを再描画（削除ボタン表示切り替え）
         renderQuestions();
     }
 
@@ -383,7 +427,7 @@
             alert("ログインに成功しました。");
             renderAuthUI();
             await fetchQuestionsFromSupabase();
-            renderQuestions(); // ログイン成功後に再描画
+            renderQuestions();
         }
     }
 
@@ -396,7 +440,7 @@
         renderQuestions();
     }
 
-    // --- Supabase データ同期処理 (quiz_data テーブルの percent_balloon カラムを使用) ---
+    // --- Supabase データ同期処理 ---
     async function fetchQuestionsFromSupabase(isManual = false) {
         if (!currentUser) {
             if (isManual) alert("ログインが必要です。");
@@ -423,9 +467,7 @@
                     if (!quizData.globalBackgrounds) quizData.globalBackgrounds = [];
                     if (!quizData.questions) quizData.questions = [];
 
-                    // 取得時の状態をスナップショットとして保存
                     updateSnapshots();
-
                     saveToLocalStorage();
                     renderGlobalBackgrounds();
                     renderQuestions();
@@ -439,7 +481,6 @@
         }
     }
 
-    // スナップショット更新用関数
     function updateSnapshots() {
         questionsSnapshot.clear();
         quizData.questions.forEach(q => {
@@ -448,13 +489,11 @@
         globalBgSnapshot = new Set(quizData.globalBackgrounds || []);
     }
 
-    // Supabaseへ最新の他人の更新を取り込んでマージ保存する処理
     async function syncAllToSupabase() {
         if (!currentUser) return true;
 
         try {
-            // 1. 最新のクラウドデータを取得
-            const { data: remoteData, error: fetchErr } = await supabaseClient
+            const { data: remoteData } = await supabaseClient
                 .from('quiz_data')
                 .select('percent_balloon')
                 .eq('id', QUIZ_DATA_ROW_ID)
@@ -468,7 +507,6 @@
             let cloudQuestions = cloudQuizData.questions || [];
             let cloudGlobalBg = cloudQuizData.globalBackgrounds || [];
 
-            // 2. 問題(questions)のマージ
             const localQuestionsMap = new Map();
             quizData.questions.forEach(q => {
                 if (q.id) localQuestionsMap.set(q.id, q);
@@ -476,7 +514,6 @@
 
             const mergedQuestionsMap = new Map();
 
-            // (A) クラウドにある問題の統合
             cloudQuestions.forEach(cq => {
                 if (!cq.id) return;
                 const cqId = cq.id;
@@ -487,24 +524,17 @@
                     const localStr = JSON.stringify(localQ);
 
                     if (snapshotStr && localStr !== snapshotStr) {
-                        // 自分が編集した場合 -> 自分の編集を採用
                         mergedQuestionsMap.set(cqId, localQ);
                     } else {
-                        // 自分は変更していない場合 -> クラウドの変更（他人の編集）を採用
                         mergedQuestionsMap.set(cqId, cq);
                     }
                 } else {
-                    // 自分の手元にない場合
-                    if (questionsSnapshot.has(cqId)) {
-                        // 過去に手元にあり、自分が削除した場合 -> 削除を維持
-                    } else {
-                        // 他人が新規追加した場合 -> 追加を取り込み
+                    if (!questionsSnapshot.has(cqId)) {
                         mergedQuestionsMap.set(cqId, cq);
                     }
                 }
             });
 
-            // (B) 自分が新規追加した問題の追加
             quizData.questions.forEach(lq => {
                 if (lq.id && !mergedQuestionsMap.has(lq.id)) {
                     if (!questionsSnapshot.has(lq.id)) {
@@ -515,7 +545,6 @@
 
             const mergedQuestions = Array.from(mergedQuestionsMap.values());
 
-            // 3. 全体背景(globalBackgrounds)のマージ
             const mergedBgSet = new Set(cloudGlobalBg);
             quizData.globalBackgrounds.forEach(bg => mergedBgSet.add(bg));
             globalBgSnapshot.forEach(bg => {
@@ -525,13 +554,11 @@
             });
             const mergedGlobalBg = Array.from(mergedBgSet);
 
-            // 統合データの作成
             const payload = {
                 globalBackgrounds: mergedGlobalBg,
                 questions: mergedQuestions
             };
 
-            // 4. Supabaseへ上書き保存
             const { error } = await supabaseClient
                 .from('quiz_data')
                 .upsert({
@@ -545,7 +572,6 @@
                 return false;
             }
 
-            // 保存成功時にメモリ・スナップショットを最新化
             quizData.questions = mergedQuestions;
             quizData.globalBackgrounds = mergedGlobalBg;
             updateSnapshots();
@@ -563,7 +589,6 @@
         }
     }
 
-    // データをLocalStorageに読み込み・保存
     function loadFromLocalStorage() {
         const localData = localStorage.getItem('balloon_quiz_data');
         if (localData) {
@@ -582,7 +607,7 @@
         document.getElementById('qCount').innerText = quizData.questions.length;
     }
 
-    // 画像の処理（問題画像は600pxにリサイズ、背景はそのままBase64化）
+    // 画像プレビュー処理
     function previewImage(input, previewId, resize = true) {
         const preview = document.getElementById(previewId);
         const clearBtn = document.getElementById(previewId === 'qImagePreview' ? 'clearQImg' : 'clearBgImg');
@@ -592,7 +617,6 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 if (resize) {
-                    // 問題イメージ：600px以下にリサイズ
                     const img = new Image();
                     img.onload = function() {
                         const maxWidth = 600;
@@ -614,15 +638,14 @@
                         preview.src = compressedBase64;
                         preview.style.display = 'block';
                         clearBtn.style.display = 'inline-block';
-                        if(previewId === 'qImagePreview') currentQImageBase64 = compressedBase64;
+                        if(previewId === 'qImagePreview') currentQImageVal = compressedBase64;
                     };
                     img.src = e.target.result;
                 } else {
-                    // 背景画像：圧縮なしでそのまま保持
                     preview.src = e.target.result;
                     preview.style.display = 'block';
                     clearBtn.style.display = 'inline-block';
-                    currentBgImageBase64 = e.target.result;
+                    if(previewId === 'bgImagePreview') currentBgImageVal = e.target.result;
                 }
             };
             reader.readAsDataURL(file);
@@ -634,22 +657,21 @@
         document.getElementById(previewId).src = "";
         document.getElementById(previewId).style.display = "none";
         document.getElementById(btnId).style.display = "none";
-        if(previewId === 'qImagePreview') currentQImageBase64 = null;
-        if(previewId === 'bgImagePreview') currentBgImageBase64 = null;
+        if(previewId === 'qImagePreview') currentQImageVal = null;
+        if(previewId === 'bgImagePreview') currentBgImageVal = null;
     }
 
-    // 全体背景画像の追加処理
+    // 全体背景画像の追加処理（Storageへアップロード）
     async function handleGlobalBg(input) {
         const files = input.files;
         if (!files.length) return;
 
-        let processedCount = 0;
         for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             const reader = new FileReader();
             reader.onload = async function(e) {
                 const img = new Image();
                 img.onload = async function() {
-                    // 背景画像：最大横幅1280pxにリサイズして容量削減（LocalStorage制限対策）
                     const maxWidth = 1280;
                     let width = img.width;
                     let height = img.height;
@@ -665,27 +687,26 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    // JPEG形式で適度に圧縮
                     const compressedBase64 = canvas.toDataURL('image/jpeg', 0.80);
-
-                    // 重複していなければ追加
-                    if (!quizData.globalBackgrounds.includes(compressedBase64)) {
-                        quizData.globalBackgrounds.push(compressedBase64);
-                    }
-                    
-                    processedCount++;
-                    if (processedCount === files.length) {
-                        input.value = '';
-                        await syncAllToSupabase();
+                    try {
+                        const url = await uploadBase64ToStorage(compressedBase64, 'global_bg');
+                        if (!quizData.globalBackgrounds.includes(url)) {
+                            quizData.globalBackgrounds.push(url);
+                        }
+                        if (i === files.length - 1) {
+                            input.value = '';
+                            await syncAllToSupabase();
+                        }
+                    } catch (err) {
+                        alert("背景画像のアップロードに失敗しました。");
                     }
                 };
                 img.src = e.target.result;
             };
-            reader.readAsDataURL(files[i]);
+            reader.readAsDataURL(file);
         }
     }
 
-    // 全体背景の描画
     function renderGlobalBackgrounds() {
         const container = document.getElementById('globalBgThumbs');
         container.innerHTML = '';
@@ -710,36 +731,55 @@
     // 問題の保存（新規・編集）
     async function saveQuestion(e) {
         e.preventDefault();
-        const index = parseInt(document.getElementById('editIndex').value);
-        const questionText = document.getElementById('questionText').value.trim();
-        const answerValue = parseInt(document.getElementById('answerValue').value);
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.innerText = "保存中...";
 
-        const existingItem = (index !== -1) ? quizData.questions[index] : {};
+        try {
+            const index = parseInt(document.getElementById('editIndex').value);
+            const questionText = document.getElementById('questionText').value.trim();
+            const answerValue = parseInt(document.getElementById('answerValue').value);
 
-        const questionItem = {
-            id: existingItem.id || 'balloon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            question: questionText,
-            answer: answerValue,
-            image: currentQImageBase64,
-            background: currentBgImageBase64,
-            created_by: existingItem.created_by || (currentUser ? currentUser.id : null)
-        };
+            const existingItem = (index !== -1) ? quizData.questions[index] : {};
 
-        if (index === -1) {
-            // 新規登録
-            quizData.questions.push(questionItem);
-        } else {
-            // 編集上書き
-            quizData.questions[index] = questionItem;
+            let finalQImg = currentQImageVal;
+            if (finalQImg && finalQImg.startsWith('data:image')) {
+                finalQImg = await uploadBase64ToStorage(finalQImg, 'questions');
+            }
+
+            let finalBgImg = currentBgImageVal;
+            if (finalBgImg && finalBgImg.startsWith('data:image')) {
+                finalBgImg = await uploadBase64ToStorage(finalBgImg, 'backgrounds');
+            }
+
+            const questionItem = {
+                id: existingItem.id || 'balloon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                question: questionText,
+                answer: answerValue,
+                image: finalQImg,
+                background: finalBgImg,
+                created_by: existingItem.created_by || (currentUser ? currentUser.id : null)
+            };
+
+            if (index === -1) {
+                quizData.questions.push(questionItem);
+            } else {
+                quizData.questions[index] = questionItem;
+            }
+
+            const success = await syncAllToSupabase();
+            if (success) {
+                resetForm();
+            }
+        } catch (err) {
+            console.error(err);
+            alert("保存中にエラーが発生しました。");
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = document.getElementById('editIndex').value === "-1" ? "登録する" : "更新する";
         }
-
-        const success = await syncAllToSupabase();
-        if (!success) return;
-
-        resetForm();
     }
 
-    // 問題一覧の描画 (検索フィルター対応)
     function renderQuestions() {
         const list = document.getElementById('questionList');
         list.innerHTML = '';
@@ -749,14 +789,12 @@
         const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
         quizData.questions.forEach((q, index) => {
-            // 検索フィルタリング
             if (query !== '') {
                 const matchText = q.question.toLowerCase().includes(query);
                 const matchAns = String(q.answer).includes(query);
                 if (!matchText && !matchAns) return;
             }
 
-            // 削除権限判定（管理者または制作者本人のみ）
             const canDelete = currentUser && (
                 isUserAdmin ||
                 (q.created_by && q.created_by === currentUser.id)
@@ -781,19 +819,17 @@
         });
     }
 
-    // 編集モード移行
     function editQuestion(index) {
         const q = quizData.questions[index];
         document.getElementById('editIndex').value = index;
         document.getElementById('questionText').value = q.question;
         document.getElementById('answerValue').value = q.answer;
         
-        // 画像の展開
         if (q.image) {
             document.getElementById('qImagePreview').src = q.image;
             document.getElementById('qImagePreview').style.display = 'block';
             document.getElementById('clearQImg').style.display = 'inline-block';
-            currentQImageBase64 = q.image;
+            currentQImageVal = q.image;
         } else {
             clearImage('qImageInput', 'qImagePreview', 'clearQImg');
         }
@@ -802,7 +838,7 @@
             document.getElementById('bgImagePreview').src = q.background;
             document.getElementById('bgImagePreview').style.display = 'block';
             document.getElementById('clearBgImg').style.display = 'inline-block';
-            currentBgImageBase64 = q.background;
+            currentBgImageVal = q.background;
         } else {
             clearImage('bgImageInput', 'bgImagePreview', 'clearBgImg');
         }
@@ -832,71 +868,232 @@
         document.getElementById('cancelEditBtn').style.display = "none";
     }
 
-    // JSONエクスポート
-    function exportJSON() {
+    // --- エクスポート処理 (JSON / ZIP) ---
+    async function exportData(type) {
         if (quizData.questions.length === 0 && quizData.globalBackgrounds.length === 0) {
             alert("エクスポートするデータがありません。");
             return;
         }
-        const dataStr = JSON.stringify(quizData, null, 2);
-        const blob = new Blob([dataStr], {type: "application/json"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `balloon_quiz_data_${new Date().toISOString().slice(0,10)}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+
+        if (type === 'json') {
+            const dataStr = JSON.stringify(quizData, null, 2);
+            const blob = new Blob([dataStr], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `balloon_quiz_data_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } else if (type === 'zip') {
+            const zip = new JSZip();
+            const imgFolder = zip.folder("images");
+            const exportQuizData = JSON.parse(JSON.stringify(quizData));
+
+            let imgCount = 0;
+
+            // 全体背景の処理
+            for (let i = 0; i < exportQuizData.globalBackgrounds.length; i++) {
+                const bg = exportQuizData.globalBackgrounds[i];
+                if (bg && bg.startsWith('data:image')) {
+                    const blob = base64ToBlob(bg);
+                    if (blob) {
+                        const ext = blob.type.split('/')[1] || 'png';
+                        const fileName = `global_bg_${i}_${Date.now()}.${ext}`;
+                        imgFolder.file(fileName, blob);
+                        exportQuizData.globalBackgrounds[i] = `images/${fileName}`;
+                        imgCount++;
+                    }
+                }
+            }
+
+            // 各問題画像の処理
+            for (let i = 0; i < exportQuizData.questions.length; i++) {
+                const q = exportQuizData.questions[i];
+                if (q.image && q.image.startsWith('data:image')) {
+                    const blob = base64ToBlob(q.image);
+                    if (blob) {
+                        const ext = blob.type.split('/')[1] || 'png';
+                        const fileName = `q_${i}_img_${Date.now()}.${ext}`;
+                        imgFolder.file(fileName, blob);
+                        q.image = `images/${fileName}`;
+                        imgCount++;
+                    }
+                }
+                if (q.background && q.background.startsWith('data:image')) {
+                    const blob = base64ToBlob(q.background);
+                    if (blob) {
+                        const ext = blob.type.split('/')[1] || 'png';
+                        const fileName = `q_${i}_bg_${Date.now()}.${ext}`;
+                        imgFolder.file(fileName, blob);
+                        q.background = `images/${fileName}`;
+                        imgCount++;
+                    }
+                }
+            }
+
+            zip.file("quiz_data.json", JSON.stringify(exportQuizData, null, 2));
+
+            const content = await zip.generateAsync({type: "blob"});
+            const url = URL.createObjectURL(content);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `balloon_quiz_data_${new Date().toISOString().slice(0,10)}.zip`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
     }
 
-    // JSONインポート (マージ処理)
-    function importJSON(input) {
+    // --- インポート処理 (JSON / ZIP) ---
+    async function importData(input) {
         const file = input.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            try {
-                const imported = JSON.parse(e.target.result);
-                let addedQuestions = 0;
-                let addedBgs = 0;
+        try {
+            let imported = null;
 
-                // 全体背景のマージ（重複チェック）
+            if (file.name.endsWith('.json')) {
+                const text = await file.text();
+                imported = JSON.parse(text);
+            } else if (file.name.endsWith('.zip')) {
+                const zip = await JSZip.loadAsync(file);
+                const jsonFile = zip.file("quiz_data.json");
+                if (!jsonFile) {
+                    alert("ZIP内に quiz_data.json が存在しません。");
+                    return;
+                }
+                const jsonText = await jsonFile.async("text");
+                imported = JSON.parse(jsonText);
+
+                // ZIP内の相対パス画像を Base64 に展開
                 if (imported.globalBackgrounds && Array.isArray(imported.globalBackgrounds)) {
-                    imported.globalBackgrounds.forEach(bg => {
-                        if (!quizData.globalBackgrounds.includes(bg)) {
-                            quizData.globalBackgrounds.push(bg);
-                            addedBgs++;
-                        }
-                    });
-                }
-
-                // 問題のマージ（問題文が完全に一致するものはスキップ）
-                if (imported.questions && Array.isArray(imported.questions)) {
-                    imported.questions.forEach(item => {
-                        const isDuplicate = quizData.questions.some(q => q.question === item.question);
-                        if (!isDuplicate) {
-                            if (!item.id) {
-                                item.id = 'balloon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                    for (let i = 0; i < imported.globalBackgrounds.length; i++) {
+                        const path = imported.globalBackgrounds[i];
+                        if (path && path.startsWith('images/')) {
+                            const zipImg = zip.file(path);
+                            if (zipImg) {
+                                const base64 = await zipImg.async("base64");
+                                const ext = path.split('.').pop();
+                                const mime = ext === 'jpg' ? 'jpeg' : ext;
+                                imported.globalBackgrounds[i] = `data:image/${mime};base64,${base64}`;
                             }
-                            quizData.questions.push({
-                                ...item,
-                                created_by: currentUser ? currentUser.id : null
-                            });
-                            addedQuestions++;
                         }
-                    });
+                    }
                 }
 
-                await syncAllToSupabase();
-                
-                alert(`インポートが完了しました！\n・新しく追加された問題: ${addedQuestions}件\n・新しく追加された共通背景: ${addedBgs}件\n(既存の要素は保持されました)`);
-                input.value = '';
-            } catch (err) {
-                alert("JSONファイルの解析に失敗しました。正しいフォーマットか確認してください。");
-                console.error(err);
+                if (imported.questions && Array.isArray(imported.questions)) {
+                    for (let i = 0; i < imported.questions.length; i++) {
+                        const q = imported.questions[i];
+                        if (q.image && q.image.startsWith('images/')) {
+                            const zipImg = zip.file(q.image);
+                            if (zipImg) {
+                                const base64 = await zipImg.async("base64");
+                                const ext = q.image.split('.').pop();
+                                const mime = ext === 'jpg' ? 'jpeg' : ext;
+                                q.image = `data:image/${mime};base64,${base64}`;
+                            }
+                        }
+                        if (q.background && q.background.startsWith('images/')) {
+                            const zipImg = zip.file(q.background);
+                            if (zipImg) {
+                                const base64 = await zipImg.async("base64");
+                                const ext = q.background.split('.').pop();
+                                const mime = ext === 'jpg' ? 'jpeg' : ext;
+                                q.background = `data:image/${mime};base64,${base64}`;
+                            }
+                        }
+                    }
+                }
             }
-        };
-        reader.readAsText(file);
+
+            if (!imported) return;
+
+            let addedQuestions = 0;
+            let addedBgs = 0;
+
+            if (imported.globalBackgrounds && Array.isArray(imported.globalBackgrounds)) {
+                imported.globalBackgrounds.forEach(bg => {
+                    if (!quizData.globalBackgrounds.includes(bg)) {
+                        quizData.globalBackgrounds.push(bg);
+                        addedBgs++;
+                    }
+                });
+            }
+
+            if (imported.questions && Array.isArray(imported.questions)) {
+                imported.questions.forEach(item => {
+                    const isDuplicate = quizData.questions.some(q => q.question === item.question);
+                    if (!isDuplicate) {
+                        if (!item.id) {
+                            item.id = 'balloon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                        }
+                        quizData.questions.push({
+                            ...item,
+                            created_by: currentUser ? currentUser.id : null
+                        });
+                        addedQuestions++;
+                    }
+                });
+            }
+
+            await syncAllToSupabase();
+            
+            alert(`インポートが完了しました！\n・新しく追加された問題: ${addedQuestions}件\n・新しく追加された共通背景: ${addedBgs}件\n(既存の要素は保持されました)`);
+            input.value = '';
+        } catch (err) {
+            alert("ファイルの読み込み・解析に失敗しました。");
+            console.error(err);
+        }
+    }
+
+    // --- 既存Base64画像をSupabase Storageへ一括移行 ---
+    async function migrateBase64ToStorage() {
+        if (!currentUser) {
+            alert("Base64画像をStorageへ一括アップロードするにはログインが必要です。");
+            return;
+        }
+
+        if (!confirm("既存のBase64画像データをすべてSupabase Storageへアップロードし、URL管理に置き換えますか？\n（データ量によっては時間がかかる場合があります）")) {
+            return;
+        }
+
+        let migratedCount = 0;
+
+        try {
+            // 全体背景の移行
+            for (let i = 0; i < quizData.globalBackgrounds.length; i++) {
+                const bg = quizData.globalBackgrounds[i];
+                if (bg && bg.startsWith('data:image')) {
+                    const url = await uploadBase64ToStorage(bg, 'global_bg');
+                    quizData.globalBackgrounds[i] = url;
+                    migratedCount++;
+                }
+            }
+
+            // 問題画像の移行
+            for (let i = 0; i < quizData.questions.length; i++) {
+                const q = quizData.questions[i];
+                if (q.image && q.image.startsWith('data:image')) {
+                    const url = await uploadBase64ToStorage(q.image, 'questions');
+                    q.image = url;
+                    migratedCount++;
+                }
+                if (q.background && q.background.startsWith('data:image')) {
+                    const url = await uploadBase64ToStorage(q.background, 'backgrounds');
+                    q.background = url;
+                    migratedCount++;
+                }
+            }
+
+            if (migratedCount > 0) {
+                await syncAllToSupabase();
+                alert(`移行が完了しました！ ${migratedCount} 件の画像が Storage にアップロードされました。`);
+            } else {
+                alert("移行対象となるBase64画像が見つかりませんでした（すでにURL化されています）。");
+            }
+        } catch (err) {
+            console.error("一括移行エラー:", err);
+            alert("移行処理中にエラーが発生しました。");
+        }
     }
 
     // エスケープ処理
