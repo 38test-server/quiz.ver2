@@ -366,6 +366,20 @@
             transform: translateY(0);
         }
 
+        /* 追加: エンディング上の大きな文字スタイリング */
+        .player-info-section {
+            text-align: center;
+            margin-top: 80px;
+            padding: 20px 0;
+        }
+
+        .player-info-text {
+            font-family: var(--font-title);
+            font-size: clamp(1.8rem, 5vw, 3rem);
+            color: #ffffff;
+            letter-spacing: 3px;
+        }
+
         /* =========================================================
            5. エンディング & ランキングリンク & フッター
            ========================================================= */
@@ -635,6 +649,11 @@
 
             </div>
         </div>
+
+        <!-- エンディングの1つ上に追加するメッセージエリア -->
+        <section class="player-info-section fade-in-element">
+            <h2 class="player-info-text">すべて1〜5人で遊べます。</h2>
+        </section>
 
         <!-- エンディングエリア -->
         <section class="ending-section fade-in-element">
