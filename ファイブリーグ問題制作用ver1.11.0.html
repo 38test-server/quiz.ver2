@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+[cite: 12]<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ファイブリーグ 問題制作ツール</title>
+    <title>ファイブリーグ 問題制作ツール ver1.11.1</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- ZIP操作用ライブラリ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -581,6 +581,16 @@
         }
     }
 
+    function escapeHTML(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     async function loginToSupabase() {
         const email = document.getElementById('authEmail').value;
         const password = document.getElementById('authPassword').value;
@@ -612,11 +622,9 @@
         renderQuestionList();
     }
 
-    // 直近で同期した際のスナップショット
     let questionsSnapshot = new Map();
     let bgImagesSnapshot = new Set();
 
-    // Supabaseからデータ取得
     async function fetchQuestionsFromSupabase(isManual = false) {
         const statusEl = document.getElementById('syncStatus');
         statusEl.innerText = '☁️ Supabaseからデータを読み込み中...';
@@ -661,7 +669,6 @@
         }
     }
 
-    // Supabaseへデータ保存
     async function saveToSupabase() {
         if (!currentUser) return true;
 
@@ -774,7 +781,6 @@
         }
     }
 
-    // 既存Base64画像のStorage移行機能
     async function migrateBase64ToStorage() {
         if (!currentUser) {
             alert("この操作を行うにはログインが必要です。");
@@ -1149,13 +1155,11 @@
         const searchInput = document.getElementById('searchInput');
         const keyword = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
-        let filteredQuestions = questions.filter(q => {
+        let filteredQuestions = questions.filter((q, idx) => {
             if (!keyword) return true;
 
             const normalizedKeyword = toHalfWidth(keyword).replace(/[^0-9]/g, '');
-
-            const originalIndex = questions.indexOf(q);
-            const questionNum = (originalIndex + 1).toString();
+            const questionNum = (idx + 1).toString();
 
             const matchesNumber = normalizedKeyword !== '' && questionNum === normalizedKeyword;
 
@@ -1447,163 +1451,119 @@
             }
         }
 
-        const exportData = {
+        const payload = {
             questions: exportQuestions,
             bgImages: exportBgImages
         };
 
-        zip.file("data.json", JSON.stringify(exportData, null, 2));
+        zip.file("quiz_data.json", JSON.stringify(payload, null, 2));
 
-        const content = await zip.generateAsync({ type: "blob" });
-        saveAs(content, `five_league_data_${new Date().toISOString().slice(0,10)}.zip`);
+        zip.generateAsync({ type: "blob" }).then((content) => {
+            saveAs(content, `five_league_questions_${Date.now()}.zip`);
+        });
     }
 
-    // --- インポート（ZIP / JSON形式対応） ---
+    // --- インポート (ZIP / JSON) ---
     async function importFile(event) {
         const file = event.target.files[0];
         if (!file) return;
 
-        const statusEl = document.getElementById('syncStatus');
-        statusEl.innerText = '☁️ ファイルを取り込み中...';
-
-        try {
-            if (file.name.endsWith('.zip')) {
+        if (file.name.endsWith('.json')) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    await applyImportedData(data);
+                } catch (err) {
+                    alert('JSONファイルの読み込みに失敗しました。');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        } else if (file.name.endsWith('.zip')) {
+            try {
                 const zip = await JSZip.loadAsync(file);
-                const jsonFile = zip.file("data.json");
+                const jsonFile = zip.file("quiz_data.json");
                 if (!jsonFile) {
-                    alert("ZIP内に data.json が見つかりませんでした。");
+                    alert('ZIP内に quiz_data.json が見つかりませんでした。');
                     return;
                 }
                 const jsonText = await jsonFile.async("text");
-                const imported = JSON.parse(jsonText);
+                const data = JSON.parse(jsonText);
 
-                let importedQuestions = imported.questions || [];
-                let importedBgImages = imported.bgImages || [];
-
-                async function restoreImage(path) {
-                    if (!path) return '';
-                    if (!path.startsWith('images/')) return path;
-                    const imgFile = zip.file(path);
-                    if (!imgFile) return '';
-                    const blob = await imgFile.async("blob");
-                    const base64 = await new Promise(resolve => {
-                        const reader = new FileReader();
-                        reader.onload = e => resolve(e.target.result);
-                        reader.readAsDataURL(blob);
-                    });
-                    return await uploadBase64ToStorage(base64, 'imported');
-                }
-
-                for (let q of importedQuestions) {
-                    if (q.preImage) q.preImage = await restoreImage(q.preImage);
-                    if (q.postImage) q.postImage = await restoreImage(q.postImage);
-                }
-
-                for (let i = 0; i < importedBgImages.length; i++) {
-                    let bg = importedBgImages[i];
-                    let urlStr = typeof bg === 'string' ? bg : bg.url;
-                    if (urlStr) {
-                        const uploadedUrl = await restoreImage(urlStr);
-                        if (typeof bg === 'string') {
-                            importedBgImages[i] = uploadedUrl;
-                        } else {
-                            importedBgImages[i].url = uploadedUrl;
+                for (let q of (data.questions || [])) {
+                    if (q.preImage && q.preImage.startsWith('images/')) {
+                        const imgFile = zip.file(q.preImage);
+                        if (imgFile) {
+                            const b64 = await imgFile.async("base64");
+                            q.preImage = `data:image/png;base64,${b64}`;
+                        }
+                    }
+                    if (q.postImage && q.postImage.startsWith('images/')) {
+                        const imgFile = zip.file(q.postImage);
+                        if (imgFile) {
+                            const b64 = await imgFile.async("base64");
+                            q.postImage = `data:image/png;base64,${b64}`;
                         }
                     }
                 }
 
-                await processImportedData(importedQuestions, importedBgImages);
-
-            } else if (file.name.endsWith('.json')) {
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    const imported = JSON.parse(e.target.result);
-                    let importedQuestions = Array.isArray(imported) ? imported : (imported.questions || []);
-                    let importedBgImages = Array.isArray(imported) ? [] : (imported.bgImages || []);
-
-                    for (let q of importedQuestions) {
-                        if (q.preImage && q.preImage.startsWith('data:image')) {
-                            q.preImage = await uploadBase64ToStorage(q.preImage, 'questions');
-                        }
-                        if (q.postImage && q.postImage.startsWith('data:image')) {
-                            q.postImage = await uploadBase64ToStorage(q.postImage, 'questions');
-                        }
-                    }
-
-                    for (let i = 0; i < importedBgImages.length; i++) {
-                        let bg = importedBgImages[i];
+                if (data.bgImages) {
+                    for (let i = 0; i < data.bgImages.length; i++) {
+                        let bg = data.bgImages[i];
                         let urlStr = typeof bg === 'string' ? bg : bg.url;
-                        if (urlStr && urlStr.startsWith('data:image')) {
-                            const uploadedUrl = await uploadBase64ToStorage(urlStr, 'backgrounds');
-                            if (typeof bg === 'string') {
-                                importedBgImages[i] = uploadedUrl;
-                            } else {
-                                importedBgImages[i].url = uploadedUrl;
+                        if (urlStr && urlStr.startsWith('images/')) {
+                            const imgFile = zip.file(urlStr);
+                            if (imgFile) {
+                                const b64 = await imgFile.async("base64");
+                                const dataUrl = `data:image/png;base64,${b64}`;
+                                if (typeof bg === 'string') {
+                                    data.bgImages[i] = dataUrl;
+                                } else {
+                                    data.bgImages[i].url = dataUrl;
+                                }
                             }
                         }
                     }
+                }
 
-                    await processImportedData(importedQuestions, importedBgImages);
-                };
-                reader.readAsText(file);
+                await applyImportedData(data);
+            } catch (err) {
+                alert('ZIPファイルの読み込みに失敗しました。');
+                console.error(err);
             }
-        } catch (err) {
-            alert('ファイルの読み込みに失敗しました。');
-            console.error(err);
-            statusEl.innerText = '❌ インポートエラー';
         }
         event.target.value = '';
     }
 
-    async function processImportedData(importedQuestions, importedBgImages) {
-        let bgUpdated = false;
-        if (importedBgImages && Array.isArray(importedBgImages) && importedBgImages.length > 0) {
-            bgImages = importedBgImages;
-            bgUpdated = true;
+    async function applyImportedData(data) {
+        let importedQuestions = [];
+        let importedBgImages = [];
+
+        if (Array.isArray(data)) {
+            importedQuestions = data;
+        } else if (typeof data === 'object' && data !== null) {
+            importedQuestions = data.questions || [];
+            importedBgImages = data.bgImages || [];
         }
 
-        let addedCount = 0;
-        let duplicateCount = 0;
+        if (importedQuestions.length === 0 && importedBgImages.length === 0) {
+            alert('読み込んだファイルに有効なデータが含まれていません。');
+            return;
+        }
 
-        importedQuestions.forEach(item => {
-            const isDuplicate = questions.some(existing => 
-                existing.questionText === item.questionText && 
-                existing.mainAnswer === item.mainAnswer
-            );
-
-            if (!isDuplicate) {
-                if (!item.difficulty) item.difficulty = 1;
-                if (!item.id) item.id = 'five_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-                item.created_by = currentUser ? currentUser.id : null;
-                questions.push(item);
-                addedCount++;
-            } else {
-                duplicateCount++;
-            }
-        });
+        if (confirm(`問題 ${importedQuestions.length} 件、背景画像 ${importedBgImages.length} 枚を読み込みます。既存のデータに追加しますか？\n[OK] 追加する  [キャンセル] 上書きする`)) {
+            questions = questions.concat(importedQuestions);
+            bgImages = bgImages.concat(importedBgImages);
+        } else {
+            questions = importedQuestions;
+            bgImages = importedBgImages;
+        }
 
         await saveToSupabase();
         renderQuestionList();
         renderBgImageList();
-
-        let message = `取り込み完了: 問題${addedCount}件追加、${duplicateCount}件の重複をスキップしました。`;
-        if (bgUpdated) {
-            message += `\n背景画像リスト（${bgImages.length}枚）を新しいデータに更新しました。`;
-        }
-        alert(message);
-    }
-
-    function escapeHTML(str) {
-        if (!str) return '';
-        return str.replace(/[&<>'"]/g, 
-            tag => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                "'": '&#39;',
-                '"': '&quot;'
-            }[tag] || tag)
-        );
+        alert(' データの読み込みが完了しました！');
     }
 </script>
 
