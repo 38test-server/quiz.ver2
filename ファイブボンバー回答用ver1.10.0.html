@@ -967,7 +967,11 @@
         choiceSection.style.display = 'none';
 
         const isKojien = checkIsKojienType(currentQuestion);
-        const totalSubs = currentQuestion.answers ? currentQuestion.answers.length : 0;
+        // 広辞苑問題の場合は参加人数（totalPlayers）分、それ以外は全お題数
+        const totalSubs = isKojien 
+            ? Math.min(totalPlayers, currentQuestion.answers ? currentQuestion.answers.length : 0)
+            : (currentQuestion.answers ? currentQuestion.answers.length : 0);
+        
         let pIndex = 0;
 
         function showNextSub() {
@@ -1151,7 +1155,7 @@
             return;
         }
 
-        // Enterキーで正解判定処理
+  // Enterキーで正解判定処理
         if (e.key === 'Enter') {
             if (gameMode === 'choice' && !isKojien && selectedSubIndex === null) {
                 return; // お題未選択時は正解処理を行わない
@@ -1164,7 +1168,7 @@
                     matchedIndex = selectedSubIndex;
                 }
             } else {
-                // クラシックモード：未回答の次のインデックスを正解とする
+                // クラシックモード・広辞苑問題：未回答の次のインデックスを正解とする
                 for (let i = 0; i < currentQuestion.answers.length; i++) {
                     if (!solvedSubIndices.includes(i)) {
                         matchedIndex = i;
@@ -1189,7 +1193,10 @@
 
                 currentRound++;
 
-                if (currentRound >= currentQuestion.answers.length) {
+                // 目標正解数を判定（広辞苑問題なら参加人数、通常問題なら全お題数）
+                const targetCount = isKojien ? Math.min(totalPlayers, currentQuestion.answers.length) : currentQuestion.answers.length;
+
+                if (currentRound >= targetCount) {
                     gameOver(true);
                 } else {
                     updateIndicators();
