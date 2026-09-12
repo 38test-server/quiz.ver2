@@ -227,7 +227,7 @@
     let isPaused = false;
     let speedMultiplier = 1.0;
 
-    // ====================================================
+// ====================================================
     // メイン制御ルーチン (1周実行後にページリロード)
     // ====================================================
     async function startDisplayLoop() {
@@ -236,7 +236,7 @@
             await displayGameRanking(game);
         }
 
-        // 2. クレジットテキストの表示
+        // 2. localStorageで管理された対象のクレジットテキストを表示
         await displayCredits();
 
         // 3. 1周完了後にページを再読み込み（データ・表示を最新状態に更新）
@@ -320,22 +320,40 @@
         }).join('');
     }
 
-    // ====================================================
-    // クレジット取得・表示関数
+// ====================================================
+    // クレジット取得・表示関数（localStorageで3ファイルを順繰り切り替え）
     // ====================================================
     async function displayCredits() {
+        // 対象となるクレジットファイルのリスト
+        const creditFiles = ['credits.txt', 'credits2.txt', 'credits3.txt'];
+
+        // localStorageから現在のインデックスを取得（初期値は 0）
+        let currentIndex = parseInt(localStorage.getItem('credit_file_index') || '0', 10);
+
+        // インデックスが範囲外の場合は 0 に修正
+        if (isNaN(currentIndex) || currentIndex < 0 || currentIndex >= creditFiles.length) {
+            currentIndex = 0;
+        }
+
+        // 今回読み込むファイル名を決定
+        const targetFile = creditFiles[currentIndex];
+
+        // 次回表示用にインデックスを更新して保存 (0 -> 1 -> 2 -> 0 ...)
+        const nextIndex = (currentIndex + 1) % creditFiles.length;
+        localStorage.setItem('credit_file_index', nextIndex.toString());
+
         let lines = [];
         try {
-            // 同一フォルダ内の credits.txt を読み込み
-            const response = await fetch('credits.txt');
+            // 対象ファイルを読み込み
+            const response = await fetch(targetFile);
             if (response.ok) {
                 const text = await response.text();
                 lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
             } else {
-                lines = ['クレジット', 'credits.txt が見つかりません'];
+                lines = ['クレジット', `${targetFile} が見つかりません`];
             }
         } catch (e) {
-            lines = ['クレジット', 'credits.txt の読み込みに失敗しました'];
+            lines = ['クレジット', `${targetFile} の読み込みに失敗しました`];
         }
 
         // HTML構築（初行のみ巨大化）
@@ -354,7 +372,6 @@
 
         await animateContent(html);
     }
-
     // ====================================================
     // スクロール制御ユーティリティ
     // ====================================================
