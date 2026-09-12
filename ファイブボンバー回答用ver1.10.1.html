@@ -1155,7 +1155,7 @@
             return;
         }
 
-  // Enterキーで正解判定処理
+        // Enterキーで正解判定処理
         if (e.key === 'Enter') {
             if (gameMode === 'choice' && !isKojien && selectedSubIndex === null) {
                 return; // お題未選択時は正解処理を行わない
@@ -1281,7 +1281,6 @@
         resultScore.textContent = `${score} pt`;
 
         incorrectAnswersList.innerHTML = '';
-        const isKojien = checkIsKojienType(currentQuestion);
         let unsolvedCount = 0;
 
         if (currentQuestion && currentQuestion.answers) {
