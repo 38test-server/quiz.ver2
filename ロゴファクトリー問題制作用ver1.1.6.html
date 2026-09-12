@@ -819,7 +819,7 @@
     await syncToSupabase();
   }
 
-  // --- 一覧表示・検索 ---
+// --- 一覧表示・検索 ---
   function renderQuizList() {
     const rawSearchText = document.getElementById('searchInput').value.trim().toLowerCase();
     // 「no.」「no」などの接頭辞を取り除いた文字列・数値用の整理
@@ -828,11 +828,14 @@
     const listContainer = document.getElementById('quizList');
     listContainer.innerHTML = '';
 
-    // まず各問題に元の登録順番号 (1〜) を紐付ける
-    const mappedQuizzes = quizzes.map((quiz, index) => ({
-      quiz,
-      no: index + 1
-    }));
+    // 回答用画面と同様に、データ配列の元の登録順（インデックス + 1）を保持してNo.を割り当て
+    // 一覧表示は最新の登録問題が上（逆順）に並ぶため、配列を反転してマップします
+    const mappedQuizzes = quizzes
+      .map((quiz, index) => ({
+        quiz,
+        no: index + 1
+      }))
+      .reverse();
 
     const filtered = mappedQuizzes.filter(({ quiz, no }) => {
       if (!rawSearchText) return true;
