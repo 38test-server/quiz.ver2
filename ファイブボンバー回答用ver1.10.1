@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ファイブボンバー - パーティーモード</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --accent-red: #ff3333;
+            --gold-primary: #d97706;
+            --gold-light: #fef08a;
+            --gold-border: #facc15;
+            --text-color: #ffffff;
+            --danger-color: #ef4444;
+            --success-color: #10b981;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* 画面シェイクアニメーション */
+        @keyframes shake {
+            0% { transform: translate(2px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(0px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(2px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(2px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        .shake-effect {
+            animation: shake 0.15s infinite;
+        }
+
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* 動的背景レイヤー */
+        #dynamic-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            z-index: 1;
+        }
+
+        /* 爆弾＆パドル演出用ステージ */
+        #game-stage {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .paddle-img {
+            width: 140px;
+            height: auto;
+            position: absolute;
+            transform: translateX(-50%);
+            transition: top 0.3s ease-out;
+            z-index: 2;
+        }
+
+        #bomb-img {
+            width: 200px;
+            height: auto;
+            position: absolute;
+            transform: translateX(-50%);
+            top: 0px;
+            z-index: 3;
+            transition: left 0.4s ease, top 0.1s linear;
+        }
+
+        /* スモーク演出 */
+        #smoke-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(2.5);
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+            z-index: 100;
+            display: none;
+            pointer-events: none;
+        }
+
+        /* 各画面 */
+        .screen {
+            display: none;
+            width: 90vw;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 10;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        /* ロビー・結果画面は縦スクロール許可 */
+        #screen-lobby, #screen-result {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        /* プレイ画面はスクロール無効化＆フィット設定 */
+        #screen-play {
+            max-height: 98vh;
+            overflow: hidden;
+            padding: 0;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        /* パネル */
+        .card-panel {
+            background: transparent;
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: none;
+            border: none;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+        }
+
+        #screen-play .card-panel {
+            padding: 10px 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 3.5rem;
+            margin-top: 0;
+            letter-spacing: 3px;
+            color: #ffffff;
+            text-shadow: 0 0 15px var(--accent-red), 2px 2px 8px #000;
+            border-bottom: 3px solid var(--gold-border);
+            padding-bottom: 20px;
+            font-weight: 900;
+        }
+
+        .form-group { margin-bottom: 30px; }
+
+        label {
+            display: inline-block;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #ffffff;
+            font-size: 1.5rem;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 4px 12px;
+            border-radius: 6px;
+            text-shadow: 0 2px 4px #000;
+        }
+
+        select, input[type="number"] {
+            width: 100%;
+            padding: 18px;
+            border: 2px solid var(--gold-border);
+            border-radius: 10px;
+            background-color: rgba(15, 23, 42, 0.95);
+            color: #ffffff;
+            font-size: 1.4rem;
+            box-sizing: border-box;
+            transition: all 0.2s;
+        }
+
+        .btn {
+            cursor: pointer;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 1.4rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            box-sizing: border-box;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: #ffffff;
+            border: 2px solid #fde047;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+        }
+
+        .btn-secondary {
+            background-color: rgba(30, 41, 59, 0.95);
+            color: white;
+            border: 1px solid #94a3b8;
+        }
+
+        .timer-text-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 8px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .timer-digital {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 2.8rem;
+            font-weight: bold;
+            color: #ff4444;
+            text-shadow: 0 0 10px rgba(255, 68, 68, 0.7);
+        }
+
+        .difficulty-badge {
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #ffffff;
+        }
+
+        .question-number-badge {
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #ffffff;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .quiz-main { text-align: center; margin-bottom: 10px; }
+
+        .main-question {
+            font-size: 1.6rem;
+            font-weight: bold;
+            color: #ffffff;
+            margin-bottom: 10px;
+            line-height: 1.3;
+            padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 10px;
+            border-left: 6px solid var(--gold-border);
+            text-align: left;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+        }
+
+        .sub-question-box {
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 2px solid var(--gold-border);
+            min-height: 50px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .sub-question-text {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #fef08a;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+        }
+
+        .sub-question-image-box {
+            max-width: 100%;
+            height: 150px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            display: none;
+            border: 2px solid var(--gold-border);
+            background-color: rgba(0, 0, 0, 0.85);
+        }
+
+        .sub-question-image-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .operator-guide {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid var(--gold-border);
+            color: #fef08a;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px #000;
+        }
+
+        .status-indicator {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .player-lamp {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.9);
+            border: 2px solid #64748b;
+            padding: 8px 5px;
+            text-align: center;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #94a3b8;
+        }
+
+        .player-lamp.active {
+            background-color: rgba(220, 38, 38, 0.95);
+            border-color: #fde047;
+            color: #ffffff;
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.8);
+        }
+
+        .player-lamp.safe {
+            background-color: rgba(16, 185, 129, 0.95);
+            border-color: #a7f3d0;
+            color: #ffffff;
+        }
+
+        .choice-section {
+            background: rgba(0, 0, 0, 0.85);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .choice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .choice-card {
+            background-color: rgba(15, 23, 42, 0.95);
+            border: 2px solid #64748b;
+            color: #ffffff;
+            border-radius: 6px;
+            padding: 8px 4px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        .choice-card.selected { border-color: var(--gold-border); background-color: rgba(217, 119, 6, 0.95); color: #ffffff; }
+        .choice-card.solved { border-color: var(--success-color); background-color: rgba(16, 185, 129, 0.95); color: #ffffff; opacity: 0.6; }
+
+        .result-title { font-size: 4rem; font-weight: bold; text-align: center; margin-bottom: 20px; }
+        .result-clear { color: #facc15; text-shadow: 0 0 25px rgba(250, 204, 21, 0.8); }
+        .result-bomb { color: var(--danger-color); text-shadow: 0 0 25px rgba(239, 68, 68, 0.8); }
+
+        .result-details {
+            background: rgba(0, 0, 0, 0.85);
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .ranking-container {
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid var(--gold-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .ranking-title { font-size: 1.6rem; font-weight: bold; color: var(--gold-border); text-align: center; margin-bottom: 12px; }
+        .ranking-tabs { display: flex; justify-content: center; gap: 12px; margin-bottom: 12px; }
+        .ranking-tab { padding: 6px 20px; border: 1px solid var(--gold-border); background-color: rgba(15, 23, 42, 0.9); color: #fff; border-radius: 20px; cursor: pointer; font-size: 1rem; }
+        .ranking-tab.active { background-color: var(--gold-border); color: #000; font-weight: bold; }
+        .ranking-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; font-size: 1.1rem; }
+        .ranking-item { display: flex; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        .ranking-item.my-score {
+            background-color: rgba(239, 68, 68, 0.35);
+            border: 1px solid var(--danger-color);
+            border-radius: 6px;
+        }
+
+        .result-buttons { display: flex; gap: 15px; }
+        .result-buttons .btn { flex: 1; }
+
+        .incorrect-answers-box { margin-top: 15px; padding-top: 15px; border-top: 2px dashed rgba(255, 255, 255, 0.3); }
+        .incorrect-answers-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+        .incorrect-answer-item { background-color: rgba(0, 0, 0, 0.8); border-left: 6px solid var(--danger-color); border-radius: 8px; padding: 10px 15px; }
+
+        .empty-warning { text-align: center; color: #ff6b6b; background-color: rgba(0, 0, 0, 0.8); padding: 20px; border: 2px dashed #ff6b6b; border-radius: 12px; margin-bottom: 20px; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+<div class="game-container" id="game-container">
+    
+    <!-- 動的背景画像エリア -->
+    <div id="dynamic-bg"></div>
+
+    <!-- 爆弾＆パドル演出用ステージ -->
+    <div id="game-stage">
+        <img id="bomb-img" src="assets/bom.png" alt="爆弾" style="display: none;">
+    </div>
+
+    <!-- ゲームオーバー時煙エフェクト -->
+    <img id="smoke-overlay" src="assets/smoke.jpeg" alt="スモーク">
+
+    <!-- 1. ロビー画面 -->
+    <div id="screen-lobby" class="screen active">
+        <div class="card-panel">
+            <h1>BOMBER PARTY</h1>
+            
+            <div id="no-questions-warning" class="empty-warning" style="display: none;">
+                問題が1つも登録されていません。<br>
+                制作ツールで問題を登録するか、JSONファイルをインポートしてください。
+            </div>
+
+            <div class="form-group">
+                <label for="select-question">挑戦する問題を選択</label>
+                <select id="select-question"></select>
+            </div>
+
+            <div class="form-group">
+                <label for="select-mode">出題ルール</label>
+                <select id="select-mode">
+                    <option value="choice" selected>🎯 フリーセレクト（事前に全お題を提示、選んで回答）</option>
+                    <option value="classic">⏱️ クラシック（1人目から順番に強制出題）</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="select-time">チーム全体の制限時間</label>
+                <select id="select-time">
+                    <option value="30">30秒 (超激辛)</option>
+                    <option value="60" selected>60秒 (標準)</option>
+                    <option value="90">90秒 (甘口)</option>
+                    <option value="120">120秒 (初心者向け)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="input-players">挑戦する人数 (1〜5人)</label>
+                <input type="number" id="input-players" min="1" max="5" value="5">
+                <div style="font-size: 1.1rem; color: #ffffff; background: rgba(0,0,0,0.6); display: inline-block; padding: 2px 8px; border-radius: 4px; margin-top: 8px;" id="players-limit-info"></div>
+            </div>
+
+            <button type="button" class="btn btn-primary" id="btn-start-game">🚀 ゲームスタート！</button>
+        </div>
+    </div>
+
+    <!-- 2. プレイ画面 -->
+    <div id="screen-play" class="screen">
+        <div class="card-panel" style="position: relative;">
+
+            <div class="timer-text-container">
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <span class="question-number-badge" id="play-question-num">問題 NO.1</span>
+                    <span class="difficulty-badge" id="play-difficulty">NORMAL</span>
+                </div>
+                <div class="timer-digital" id="timer-display">60.0</div>
+            </div>
+
+            <div class="choice-section" id="choice-section" style="display: none;">
+                <div class="choice-title" style="font-size:1rem; color: #cbd5e1; margin-bottom:6px;">💡 解く問題カードを選んでください（数字キー1〜10またはクリック、10問目は0キー）：</div>
+                <div class="choice-grid" id="choice-grid"></div>
+            </div>
+
+            <div class="quiz-main">
+                <div class="main-question" id="play-main-question">ここに主題が入ります。</div>
+                
+                <div class="sub-question-image-box" id="play-image-box">
+                    <img id="play-sub-image" src="" alt="問題画像">
+                </div>
+
+                <div class="sub-question-box" id="play-sub-box">
+                    <div class="sub-question-text" id="play-sub-question">お題テキスト</div>
+                </div>
+            </div>
+
+            <div class="operator-guide" id="operator-guide">
+                📢 声を出して回答してください！【ゲームマスター操作：正解なら [Enter] キー】
+            </div>
+
+            <div class="status-indicator" id="status-indicator"></div>
+
+            <button type="button" class="btn btn-secondary" id="btn-quit-game" style="padding: 8px 15px; font-size: 1rem; margin-top: 10px;">ゲームを中断して戻る</button>
+        </div>
+    </div>
+
+    <!-- 3. 結果画面 -->
+    <div id="screen-result" class="screen">
+        <div class="card-panel">
+            <div id="result-visual">
+                <h1 class="result-title result-clear" id="result-status">GAME CLEAR!!</h1>
+            </div>
+
+            <div class="result-details">
+                <p><strong>挑んだ問題:</strong> <span id="result-q-text">問題テーマ</span></p>
+                <p><strong>クリア状況:</strong> <span id="result-players">5問中5問</span></p>
+                <p><strong>残り時間:</strong> <span id="result-time">12.4秒</span></p>
+                <p><strong>獲得ポイント:</strong> <span id="result-score" style="font-weight: bold; color: #fde047;">0 pt</span></p>
+
+                <div id="incorrect-answers-box" class="incorrect-answers-box" style="display: none;">
+                    <div style="font-weight:bold; color:var(--danger-color); margin-bottom:10px; font-size:1.2rem;">❌ 未回答・間違えた問題の答え</div>
+                    <ul id="incorrect-answers-list" class="incorrect-answers-list"></ul>
+                </div>
+            </div>
+
+            <div class="ranking-container">
+                <div class="ranking-title">🏆 ハイスコアランキング 🏆</div>
+                <div class="ranking-tabs">
+                    <button type="button" class="ranking-tab active" id="tab-today">今日のランキング</button>
+                    <button type="button" class="ranking-tab" id="tab-overall">総合ランキング</button>
+                </div>
+                <ul class="ranking-list" id="ranking-list">
+                    <li class="ranking-item">読み込み中...</li>
+                </ul>
+            </div>
+
+            <div class="result-buttons">
+                <button type="button" class="btn btn-primary" id="btn-to-lobby">もう一度遊ぶ</button>
+                <button type="button" class="btn btn-secondary" id="btn-exit-game">終了する</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- Supabase設定 ---
+    const SUPABASE_URL = 'https://wfddewnonkwxwlaihamn.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_RFILYcq2R5yx72AMhsh0JQ_Bfk1eZHA';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const QUIZ_DATA_ROW_ID = 'main_quiz_data';
+
+    // 1920px基準のバー位置(中央X座標)
+    const BAR_POSITIONS_1920 = [431, 695, 960, 1224, 1488];
+
+    // 人数に応じたバーインデックス定義
+    const BAR_CONFIGS = {
+        1: [2],             // 中央のみ
+        2: [1, 3],          // 左から2番目、右から2番目
+        3: [1, 2, 3],       // 右から2〜4番目（インデックス1, 2, 3）
+        4: [0, 1, 3, 4],    // 真ん中以外
+        5: [0, 1, 2, 3, 4]  // すべて
+    };
+
+    // --- 音声合成エンジン (Web Audio API) ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playCorrectSound() {
+        const now = audioCtx.currentTime;
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc1.type = 'sine'; osc2.type = 'triangle';
+        osc1.frequency.setValueAtTime(523.25, now);
+        osc1.frequency.setValueAtTime(659.25, now + 0.08);
+        osc1.frequency.setValueAtTime(783.99, now + 0.16);
+        osc1.frequency.setValueAtTime(1046.50, now + 0.24);
+        osc2.frequency.setValueAtTime(1046.50, now + 0.24);
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+
+        osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
+        osc1.start(now); osc2.start(now + 0.24); osc1.stop(now + 0.7); osc2.stop(now + 0.7);
+    }
+
+    function playExplosionSound() {
+        const now = audioCtx.currentTime;
+        const bufferSize = audioCtx.sampleRate * 2;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1000, now);
+        filter.frequency.exponentialRampToValueAtTime(20, now + 1.8);
+
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.6, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 1.8);
+
+        noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+        noise.start(now); noise.stop(now + 1.8);
+    }
+
+    function playTickSound(isUrgent = false) {
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(isUrgent ? 1200 : 800, now);
+        gain.gain.setValueAtTime(isUrgent ? 0.25 : 0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now); osc.stop(now + 0.06);
+    }
+
+    // --- ゲーム変数 ---
+    let questions = [];
+    let currentQuestion = null;
+    let currentQuestionIndex = 0;
+    let gameMode = 'choice';
+    let totalPlayers = 5;
+    let maxTimeLimit = 60;
+    let remainingTime = 60;
+    let currentRound = 0;
+    let timerInterval = null;
+    let isTimerRunning = false;
+    let presentationTimer = null;
+
+    let selectedSubIndex = null;
+    let solvedSubIndices = [];
+
+    let activeBarIndices = [];
+    let paddleElements = [];
+    let paddlePositionsY = [];
+
+    let cachedTodayRanking = [];
+    let cachedOverallRanking = [];
+    let latestPlayedRecord = null;
+
+    // DOM要素
+    const container = document.getElementById('game-container');
+    const dynamicBg = document.getElementById('dynamic-bg');
+    const gameStage = document.getElementById('game-stage');
+    const bombImg = document.getElementById('bomb-img');
+    const smokeOverlay = document.getElementById('smoke-overlay');
+
+    const screenLobby = document.getElementById('screen-lobby');
+    const screenPlay = document.getElementById('screen-play');
+    const screenResult = document.getElementById('screen-result');
+
+    const selectQuestion = document.getElementById('select-question');
+    const selectMode = document.getElementById('select-mode');
+    const selectTime = document.getElementById('select-time');
+    const inputPlayers = document.getElementById('input-players');
+    const playersLimitInfo = document.getElementById('players-limit-info');
+    const noQuestionsWarning = document.getElementById('no-questions-warning');
+    const btnStartGame = document.getElementById('btn-start-game');
+
+    const timerDisplay = document.getElementById('timer-display');
+    const playDifficulty = document.getElementById('play-difficulty');
+    const playQuestionNum = document.getElementById('play-question-num');
+    const playMainQuestion = document.getElementById('play-main-question');
+    const playImageBox = document.getElementById('play-image-box');
+    const playSubImage = document.getElementById('play-sub-image');
+    const playSubBox = document.getElementById('play-sub-box');
+    const playSubQuestion = document.getElementById('play-sub-question');
+    const statusIndicator = document.getElementById('status-indicator');
+    const btnQuitGame = document.getElementById('btn-quit-game');
+
+    const choiceSection = document.getElementById('choice-section');
+    const choiceGrid = document.getElementById('choice-grid');
+
+    const resultStatus = document.getElementById('result-status');
+    const resultQText = document.getElementById('result-q-text');
+    const resultPlayers = document.getElementById('result-players');
+    const resultTime = document.getElementById('result-time');
+    const resultScore = document.getElementById('result-score');
+    const incorrectAnswersBox = document.getElementById('incorrect-answers-box');
+    const incorrectAnswersList = document.getElementById('incorrect-answers-list');
+    const rankingList = document.getElementById('ranking-list');
+    const tabToday = document.getElementById('tab-today');
+    const tabOverall = document.getElementById('tab-overall');
+    const btnToLobby = document.getElementById('btn-to-lobby');
+    const btnExitGame = document.getElementById('btn-exit-game');
+
+    loadQuestions();
+
+    async function loadQuestions() {
+        let loadedData = null;
+        try {
+            const { data, error } = await supabaseClient
+                .from('quiz_data')
+                .select('five_bomber')
+                .eq('id', QUIZ_DATA_ROW_ID)
+                .single();
+
+            if (!error && data && data.five_bomber) {
+                let fetched = data.five_bomber;
+                if (Array.isArray(fetched)) loadedData = fetched;
+                else if (fetched && Array.isArray(fetched.questions)) loadedData = fetched.questions;
+            }
+        } catch (e) {
+            console.warn('Supabaseからの読み込み失敗:', e);
+        }
+
+        if (!loadedData || loadedData.length === 0) {
+            const localStr = localStorage.getItem('five_bomber_questions');
+            if (localStr) {
+                try {
+                    const parsed = JSON.parse(localStr);
+                    if (Array.isArray(parsed)) loadedData = parsed;
+                    else if (parsed && Array.isArray(parsed.questions)) loadedData = parsed.questions;
+                } catch (e) {}
+            }
+        }
+
+        questions = loadedData || [];
+
+        if (questions.length === 0) {
+            noQuestionsWarning.style.display = 'block';
+            selectQuestion.disabled = true;
+            btnStartGame.disabled = true;
+            return;
+        }
+
+        noQuestionsWarning.style.display = 'none';
+        selectQuestion.disabled = false;
+        btnStartGame.disabled = false;
+
+        selectQuestion.innerHTML = '';
+        const randomOpt = document.createElement('option');
+        randomOpt.value = 'random';
+        randomOpt.textContent = '🎲 ランダム（登録問題からランダムに出題）';
+        selectQuestion.appendChild(randomOpt);
+
+        questions.forEach((q, idx) => {
+            const opt = document.createElement('option');
+            opt.value = idx;
+            const diffStr = (q.difficulty || 'normal').toUpperCase();
+            const qText = q.question || '';
+            const ansCount = q.answers ? q.answers.length : 0;
+            opt.textContent = `NO.${idx + 1} [${diffStr}] | ${qText.substring(0, 25)}${qText.length > 25 ? '...' : ''} (${ansCount}問)`;
+            selectQuestion.appendChild(opt);
+        });
+
+        updatePlayersLimit();
+    }
+
+    selectQuestion.addEventListener('change', updatePlayersLimit);
+
+    function updatePlayersLimit() {
+        if (questions.length === 0) return;
+        let maxQ = 5;
+        if (selectQuestion.value === 'random') {
+            maxQ = Math.min(...questions.map(q => q.answers ? q.answers.length : 0));
+        } else {
+            const selectedQ = questions[selectQuestion.value];
+            maxQ = selectedQ.answers ? selectedQ.answers.length : 0;
+        }
+        inputPlayers.max = Math.min(5, maxQ);
+        if (parseInt(inputPlayers.value) > inputPlayers.max) {
+            inputPlayers.value = inputPlayers.max;
+        }
+        playersLimitInfo.textContent = `※1〜5人で設定可能です (選択問題の最大問数: ${maxQ})`;
+    }
+
+    function checkIsKojienType(question) {
+        if (!question) return true;
+        const hasSpecificSubQuestion = question.subQuestions && 
+            question.subQuestions.some(sq => sq && sq.trim() !== "");
+        const hasSubImages = question.subImages && 
+            question.subImages.some(img => img && img.trim() !== "");
+        return !hasSpecificSubQuestion && !hasSubImages;
+    }
+
+    function getPlayerIndexForRound(round, players) {
+        if (players <= 1) return 0;
+        const cycle = 2 * players;
+        const mod = round % cycle;
+        if (mod < players) {
+            return mod;
+        } else {
+            return cycle - 1 - mod;
+        }
+    }
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    // --- パドルと爆弾のグラフィック制御 ---
+    function setupStageElements() {
+        paddleElements.forEach(el => el.remove());
+        paddleElements = [];
+        paddlePositionsY = [];
+
+        activeBarIndices = BAR_CONFIGS[totalPlayers] || BAR_CONFIGS[5];
+        const screenWidth = window.innerWidth;
+
+        activeBarIndices.forEach((barIdx) => {
+            const xPos = (BAR_POSITIONS_1920[barIdx] / 1920) * screenWidth;
+            const paddle = document.createElement('img');
+            paddle.src = 'assets/paddle.png';
+            paddle.className = 'paddle-img';
+            paddle.style.left = `${xPos}px`;
+            paddle.style.top = `180px`;
+            gameStage.appendChild(paddle);
+
+            paddleElements.push(paddle);
+            paddlePositionsY.push(180);
+        });
+
+        bombImg.style.display = 'block';
+        updateBombAndPaddlePositions(180, true);
+    }
+
+    function updateBombAndPaddlePositions(currentYPos, isInitial = false) {
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+
+        const initialY = 180;
+        const targetMaxY = (900 / 1080) * screenHeight;
+        const progress = 1 - (remainingTime / maxTimeLimit);
+        
+        const paddleY = Math.min(targetMaxY, initialY + progress * (targetMaxY - initialY));
+        const bombY = paddleY - 140;
+
+        const currentPIdx = getPlayerIndexForRound(currentRound, totalPlayers);
+        const prevPIdx = currentRound > 0 ? getPlayerIndexForRound(currentRound - 1, totalPlayers) : 0;
+
+        const activeBarIdx = activeBarIndices[currentPIdx];
+        const bombX = (BAR_POSITIONS_1920[activeBarIdx] / 1920) * screenWidth;
+
+        bombImg.style.left = `${bombX}px`;
+        bombImg.style.top = `${bombY}px`;
+
+        if (isInitial) {
+            paddleElements.forEach(p => p.style.top = `${initialY}px`);
+            return;
+        }
+
+        const isTurning = (prevPIdx === totalPlayers - 1 && currentPIdx === totalPlayers - 1) || 
+                          (prevPIdx === 0 && currentPIdx === 0 && currentRound > 0);
+
+        if (isTurning) {
+            paddleElements.forEach((paddle, idx) => {
+                paddle.style.top = `${initialY}px`;
+                setTimeout(() => {
+                    paddle.style.top = `${paddleY}px`;
+                    paddlePositionsY[idx] = paddleY;
+                }, 300);
+            });
+        } else if (currentPIdx > prevPIdx) {
+            paddleElements.forEach((paddle, idx) => {
+                if (idx >= currentPIdx) {
+                    paddle.style.top = `${paddleY}px`;
+                    paddlePositionsY[idx] = paddleY;
+                }
+            });
+        } else {
+            paddleElements.forEach((paddle, idx) => {
+                if (idx <= currentPIdx) {
+                    paddle.style.top = `${paddleY}px`;
+                    paddlePositionsY[idx] = paddleY;
+                }
+            });
+        }
+    }
+
+    // --- スタート処理 ---
+    btnStartGame.addEventListener('click', () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        let selectedIndex = selectQuestion.value;
+        if (selectedIndex === 'random') {
+            currentQuestionIndex = Math.floor(Math.random() * questions.length);
+        } else {
+            currentQuestionIndex = parseInt(selectedIndex, 10);
+        }
+
+        currentQuestion = questions[currentQuestionIndex];
+        gameMode = selectMode.value;
+        maxTimeLimit = parseFloat(selectTime.value);
+        remainingTime = maxTimeLimit;
+        totalPlayers = parseInt(inputPlayers.value);
+        currentRound = 0;
+
+        selectedSubIndex = null;
+        solvedSubIndices = [];
+
+        dynamicBg.style.backgroundImage = `url('assets/bomber_back${totalPlayers}.png')`;
+        smokeOverlay.style.display = 'none';
+
+        setupPlayScreen();
+        setupStageElements();
+        showScreen('screen-play');
+        startQuestionPresentation();
+    });
+
+    function setupPlayScreen() {
+        const diff = (currentQuestion.difficulty || 'normal').toLowerCase();
+        playDifficulty.textContent = diff.toUpperCase();
+        playDifficulty.style.backgroundColor = 
+            diff === 'easy' ? 'var(--success-color)' :
+            diff === 'hard' ? 'var(--danger-color)' : 'var(--gold-border)';
+        
+        playQuestionNum.textContent = `問題 NO.${currentQuestionIndex + 1}`;
+        playMainQuestion.textContent = currentQuestion.question;
+
+        updateTimerUI();
+
+        statusIndicator.innerHTML = '';
+        for (let i = 0; i < totalPlayers; i++) {
+            const lamp = document.createElement('div');
+            lamp.className = 'player-lamp wait';
+            lamp.id = `lamp-${i}`;
+            lamp.textContent = `${i + 1}人目`;
+            statusIndicator.appendChild(lamp);
+        }
+
+        const isKojien = checkIsKojienType(currentQuestion);
+        if (gameMode === 'choice' && !isKojien) {
+            choiceSection.style.display = 'block';
+            generateChoiceCards();
+        } else {
+            choiceSection.style.display = 'none';
+        }
+    }
+
+    function startQuestionPresentation() {
+        choiceSection.style.display = 'none';
+
+        const isKojien = checkIsKojienType(currentQuestion);
+        // 広辞苑問題の場合は参加人数（totalPlayers）分、それ以外は全お題数
+        const totalSubs = isKojien 
+            ? Math.min(totalPlayers, currentQuestion.answers ? currentQuestion.answers.length : 0)
+            : (currentQuestion.answers ? currentQuestion.answers.length : 0);
+        
+        let pIndex = 0;
+
+        function showNextSub() {
+            if (pIndex < totalSubs) {
+                if (!isKojien) {
+                    loadSubQuestionContent(pIndex);
+                } else {
+                    playSubImage.src = '';
+                    playImageBox.style.display = 'none';
+                    playSubQuestion.textContent = `解答 ${pIndex + 1} つ目`;
+                    playSubBox.style.display = 'flex';
+                }
+                playTickSound(false);
+                pIndex++;
+                presentationTimer = setTimeout(showNextSub, 1500);
+            } else {
+                if (gameMode === 'choice' && !isKojien) {
+                    choiceSection.style.display = 'block';
+                }
+                // アニメーション終了後、直ちにタイマー開始
+                startGameDirectly();
+            }
+        }
+        showNextSub();
+    }
+
+    function generateChoiceCards() {
+        choiceGrid.innerHTML = '';
+        const numQuestions = currentQuestion.answers ? currentQuestion.answers.length : 0;
+
+        for (let i = 0; i < numQuestions; i++) {
+            const card = document.createElement('div');
+            card.className = 'choice-card';
+            card.id = `choice-card-${i}`;
+
+            let title = `[${i + 1}] お題 ${i + 1}`;
+            const subQText = currentQuestion.subQuestions && currentQuestion.subQuestions[i];
+            const hasImage = currentQuestion.subImages && currentQuestion.subImages[i];
+
+            if (subQText) {
+                const limitText = subQText.length > 8 ? subQText.substring(0, 8) + '..' : subQText;
+                title = hasImage ? `[${i + 1}] 🖼️ ${limitText}` : `[${i + 1}] ${limitText}`;
+            } else if (hasImage) {
+                title = `[${i + 1}] 🖼️ お題 ${i + 1}`;
+            }
+
+            card.textContent = title;
+            card.addEventListener('click', () => {
+                if (!isTimerRunning) return;
+                if (solvedSubIndices.includes(i)) return;
+                selectSubQuestion(i);
+            });
+            choiceGrid.appendChild(card);
+        }
+    }
+
+    function selectSubQuestion(index) {
+        selectedSubIndex = index;
+        document.querySelectorAll('.choice-card').forEach((card, idx) => {
+            card.className = solvedSubIndices.includes(idx) ? 'choice-card solved' : 'choice-card';
+        });
+        const targetCard = document.getElementById(`choice-card-${index}`);
+        if (targetCard) targetCard.classList.add('selected');
+
+        loadSubQuestionContent(index);
+    }
+
+    function loadSubQuestionContent(index) {
+        if (index === null || index === undefined) {
+            playSubImage.src = '';
+            playImageBox.style.display = 'none';
+            playSubQuestion.textContent = '？お題を選択してください？';
+            playSubBox.style.display = 'flex';
+            return;
+        }
+
+        const hasImages = currentQuestion.subImages && currentQuestion.subImages[index];
+        if (hasImages) {
+            playSubImage.src = currentQuestion.subImages[index];
+            playImageBox.style.display = 'block';
+        } else {
+            playSubImage.src = '';
+            playImageBox.style.display = 'none';
+        }
+
+        const hasSubQ = currentQuestion.subQuestions && currentQuestion.subQuestions[index];
+        if (hasSubQ) {
+            playSubQuestion.textContent = currentQuestion.subQuestions[index];
+            playSubBox.style.display = 'flex';
+        } else {
+            if (hasImages) {
+                playSubBox.style.display = 'none';
+            } else {
+                playSubQuestion.textContent = `第 ${index + 1} 問`;
+                playSubBox.style.display = 'flex';
+            }
+        }
+    }
+
+    function startGameDirectly() {
+        updateIndicators();
+        const isKojien = checkIsKojienType(currentQuestion);
+
+        if (gameMode === 'choice' && !isKojien) {
+            loadSubQuestionContent(null);
+            selectedSubIndex = null;
+        } else {
+            if (!isKojien) {
+                loadSubQuestionContent(currentRound);
+            } else {
+                playSubImage.src = '';
+                playImageBox.style.display = 'none';
+                playSubQuestion.textContent = `解答 ${currentRound + 1} つ目`;
+                playSubBox.style.display = 'flex';
+            }
+        }
+
+        startTimer();
+    }
+
+    function updateIndicators() {
+        const activePlayerIdx = getPlayerIndexForRound(currentRound, totalPlayers);
+        for (let i = 0; i < totalPlayers; i++) {
+            const lamp = document.getElementById(`lamp-${i}`);
+            if (!lamp) continue;
+            lamp.className = (i === activePlayerIdx) ? 'player-lamp active' : 'player-lamp wait';
+        }
+    }
+
+    function startTimer() {
+        if (isTimerRunning) return;
+        isTimerRunning = true;
+        let lastSec = Math.ceil(remainingTime);
+
+        timerInterval = setInterval(() => {
+            remainingTime -= 0.1;
+            if (remainingTime <= 0) {
+                remainingTime = 0;
+                updateTimerUI();
+                gameOver(false);
+            } else {
+                updateTimerUI();
+                updateBombAndPaddlePositions();
+                
+                const currentSec = Math.ceil(remainingTime);
+                if (currentSec !== lastSec && currentSec <= 10) {
+                    playTickSound(currentSec <= 4);
+                }
+                lastSec = currentSec;
+            }
+        }, 100);
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        isTimerRunning = false;
+    }
+
+    function updateTimerUI() {
+        timerDisplay.textContent = remainingTime.toFixed(1);
+    }
+
+    // --- オペレーターキーボード操作（正解処理・数字選択） ---
+    window.addEventListener('keydown', (e) => {
+        if (!isTimerRunning) return;
+
+        const isKojien = checkIsKojienType(currentQuestion);
+
+        // 数字キー(1〜9, 0)でお題選択（フリーセレクト時）
+        if (gameMode === 'choice' && !isKojien && ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(e.key)) {
+            let targetIdx;
+            if (e.key === '0') {
+                targetIdx = 9; // 10問目
+            } else {
+                targetIdx = parseInt(e.key, 10) - 1; // 1〜9問目
+            }
+            const totalAns = currentQuestion.answers ? currentQuestion.answers.length : 0;
+            if (targetIdx < totalAns && !solvedSubIndices.includes(targetIdx)) {
+                selectSubQuestion(targetIdx);
+            }
+            return;
+        }
+
+  // Enterキーで正解判定処理
+        if (e.key === 'Enter') {
+            if (gameMode === 'choice' && !isKojien && selectedSubIndex === null) {
+                return; // お題未選択時は正解処理を行わない
+            }
+
+            let matchedIndex = -1;
+
+            if (gameMode === 'choice' && !isKojien) {
+                if (!solvedSubIndices.includes(selectedSubIndex)) {
+                    matchedIndex = selectedSubIndex;
+                }
+            } else {
+                // クラシックモード・広辞苑問題：未回答の次のインデックスを正解とする
+                for (let i = 0; i < currentQuestion.answers.length; i++) {
+                    if (!solvedSubIndices.includes(i)) {
+                        matchedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (matchedIndex !== -1) {
+                playCorrectSound();
+                solvedSubIndices.push(matchedIndex);
+
+                if (gameMode === 'choice' && !isKojien) {
+                    const solvedCard = document.getElementById(`choice-card-${matchedIndex}`);
+                    if (solvedCard) {
+                        solvedCard.className = 'choice-card solved';
+                        solvedCard.textContent = "✅ 正解！";
+                    }
+                    selectedSubIndex = null;
+                    loadSubQuestionContent(null);
+                }
+
+                currentRound++;
+
+                // 目標正解数を判定（広辞苑問題なら参加人数、通常問題なら全お題数）
+                const targetCount = isKojien ? Math.min(totalPlayers, currentQuestion.answers.length) : currentQuestion.answers.length;
+
+                if (currentRound >= targetCount) {
+                    gameOver(true);
+                } else {
+                    updateIndicators();
+                    updateBombAndPaddlePositions();
+
+                    if (gameMode === 'classic' || isKojien) {
+                        if (!isKojien) {
+                            loadSubQuestionContent(currentRound);
+                        } else {
+                            playSubImage.src = '';
+                            playImageBox.style.display = 'none';
+                            playSubQuestion.textContent = `解答 ${currentRound + 1} つ目`;
+                            playSubBox.style.display = 'flex';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // --- ゲーム終了 ---
+    async function gameOver(isClear) {
+        stopTimer();
+        const isKojien = checkIsKojienType(currentQuestion);
+        // 広辞苑問題の場合は参加人数（totalPlayers）分、それ以外は全お題数
+        const targetAns = isKojien 
+            ? Math.min(totalPlayers, currentQuestion.answers ? currentQuestion.answers.length : 0)
+            : (currentQuestion.answers ? currentQuestion.answers.length : 0);
+
+        let calculatedScore = targetAns > 0 ? Math.floor((currentRound / targetAns) * 100) : 0;
+        if (isClear && currentRound === targetAns) calculatedScore += targetAns;
+
+        const timeTaken = parseFloat((maxTimeLimit - remainingTime).toFixed(1));
+
+        latestPlayedRecord = { score: calculatedScore, time: timeTaken };
+
+        if (isClear) {
+            resultStatus.textContent = "GAME CLEAR!!";
+            resultStatus.className = "result-title result-clear";
+            resultTime.textContent = `${remainingTime.toFixed(1)} 秒`;
+
+            bombImg.style.display = 'none';
+            paddleElements.forEach(p => p.remove());
+            paddleElements = [];
+
+            for (let i = 0; i < totalPlayers; i++) {
+                const lamp = document.getElementById(`lamp-${i}`);
+                if (lamp) lamp.className = 'player-lamp safe';
+            }
+        } else {
+            playExplosionSound();
+            container.classList.add('shake-effect');
+            
+            smokeOverlay.style.display = 'block';
+
+            resultStatus.textContent = "BOMB!!!";
+            resultStatus.className = "result-title result-bomb";
+            resultTime.textContent = "0.0 秒 (タイムアップ)";
+
+            setTimeout(() => {
+                container.classList.remove('shake-effect');
+                showScreen('screen-result');
+            }, 1800);
+        }
+
+        writeResultDetails(calculatedScore);
+        await saveRecordAndFetchRanking(calculatedScore, timeTaken);
+
+        if (isClear) {
+            showScreen('screen-result');
+        }
+    }
+
+    function writeResultDetails(score) {
+        resultQText.textContent = currentQuestion.question;
+        const isKojien = checkIsKojienType(currentQuestion);
+        const targetAns = isKojien 
+            ? Math.min(totalPlayers, currentQuestion.answers ? currentQuestion.answers.length : 0)
+            : (currentQuestion.answers ? currentQuestion.answers.length : 0);
+
+        resultPlayers.textContent = `${currentRound} 問 / 全 ${targetAns} 問 (参加者 ${totalPlayers} 人)`;
+        resultScore.textContent = `${score} pt`;
+
+        incorrectAnswersList.innerHTML = '';
+        const isKojien = checkIsKojienType(currentQuestion);
+        let unsolvedCount = 0;
+
+        if (currentQuestion && currentQuestion.answers) {
+            currentQuestion.answers.forEach((ansCandidates, idx) => {
+                if (!solvedSubIndices.includes(idx)) {
+                    unsolvedCount++;
+                    const li = document.createElement('li');
+                    li.className = 'incorrect-answer-item';
+
+                    let subTitle = `【第 ${idx + 1} 問】`;
+                    if (!isKojien && currentQuestion.subQuestions && currentQuestion.subQuestions[idx]) {
+                        subTitle = `【お題 ${idx + 1}: ${currentQuestion.subQuestions[idx]}】`;
+                    }
+                    let ansStr = Array.isArray(ansCandidates) ? ansCandidates.join(' / ') : ansCandidates;
+
+                    li.innerHTML = `
+                        <div style="font-size:1rem; color:#cbd5e1;">${subTitle}</div>
+                        <div style="font-weight:bold; font-size:1.3rem;">正解: ${ansStr}</div>
+                    `;
+                    incorrectAnswersList.appendChild(li);
+                }
+            });
+        }
+        incorrectAnswersBox.style.display = unsolvedCount > 0 ? 'block' : 'none';
+    }
+
+    async function saveRecordAndFetchRanking(score, timeTaken) {
+        rankingList.innerHTML = '<li class="ranking-item">読み込み中...</li>';
+        try {
+            await supabaseClient.from('daily_records_bomber').insert([
+                { five_bomber: score, five_bomber_time: timeTaken }
+            ]);
+
+            const { data, error } = await supabaseClient
+                .from('daily_records_bomber')
+                .select('five_bomber, five_bomber_time, created_at')
+                .order('five_bomber', { ascending: false })
+                .order('five_bomber_time', { ascending: true })
+                .limit(100);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+                cachedOverallRanking = data.slice(0, 10);
+                cachedTodayRanking = data.filter(item => {
+                    if (!item.created_at) return false;
+                    const itemDate = new Date(item.created_at);
+                    const itemDateStr = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}-${String(itemDate.getDate()).padStart(2, '0')}`;
+                    return itemDateStr === todayStr;
+                }).slice(0, 10);
+
+                renderRankingList(cachedTodayRanking);
+            } else {
+                rankingList.innerHTML = '<li class="ranking-item">まだ記録がありません</li>';
+            }
+        } catch (e) {
+            console.error('ランキングエラー:', e);
+            rankingList.innerHTML = '<li class="ranking-item">ランキングの取得に失敗しました</li>';
+        }
+    }
+
+    function renderRankingList(items) {
+        rankingList.innerHTML = '';
+        if (!items || items.length === 0) {
+            rankingList.innerHTML = '<li class="ranking-item">対象の記録がありません</li>';
+            return;
+        }
+
+        let isMyRecordHighlighted = false;
+
+        items.forEach((item, index) => {
+            const li = document.createElement('li');
+            
+            let isCurrentPlayer = false;
+            if (latestPlayedRecord && !isMyRecordHighlighted &&
+                item.five_bomber === latestPlayedRecord.score && 
+                item.five_bomber_time === latestPlayedRecord.time) {
+                isCurrentPlayer = true;
+                isMyRecordHighlighted = true;
+            }
+
+            li.className = `ranking-item${isCurrentPlayer ? ' my-score' : ''}`;
+
+            let medal = `${index + 1}位`;
+            if (index === 0) medal = '🥇 1位';
+            else if (index === 1) medal = '🥈 2位';
+            else if (index === 2) medal = '🥉 3位';
+
+            const timeStr = item.five_bomber_time !== null ? `${item.five_bomber_time}秒` : '-';
+            li.innerHTML = `
+                <span style="font-weight:bold;">${medal}</span>
+                <span style="font-weight:bold; color:#fde047;">${item.five_bomber} pt</span>
+                <span style="color:#cbd5e1; font-size:1rem;">⏱️ ${timeStr}</span>
+            `;
+            rankingList.appendChild(li);
+        });
+    }
+
+    tabToday.addEventListener('click', () => {
+        tabToday.classList.add('active'); tabOverall.classList.remove('active');
+        renderRankingList(cachedTodayRanking);
+    });
+
+    tabOverall.addEventListener('click', () => {
+        tabOverall.classList.add('active'); tabToday.classList.remove('active');
+        renderRankingList(cachedOverallRanking);
+    });
+
+    btnToLobby.addEventListener('click', () => {
+        if (presentationTimer) clearTimeout(presentationTimer);
+        smokeOverlay.style.display = 'none';
+        loadQuestions();
+        showScreen('screen-lobby');
+    });
+
+    btnExitGame.addEventListener('click', () => { window.close(); });
+
+    btnQuitGame.addEventListener('click', () => {
+        if (confirm('ゲームを中断して最初の画面に戻りますか？')) {
+            if (presentationTimer) clearTimeout(presentationTimer);
+            stopTimer();
+            smokeOverlay.style.display = 'none';
+            bombImg.style.display = 'none';
+            paddleElements.forEach(p => p.remove());
+            loadQuestions();
+            showScreen('screen-lobby');
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (isTimerRunning) {
+            updateBombAndPaddlePositions();
+        }
+    });
+</script>
+
+</body>
+</html>
