@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+[cite: 11]<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ファイブリーグ - 回答用システム</title>
+    <title>ファイブリーグ - 回答用システム ver1.10.3</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
@@ -264,7 +264,6 @@
             position: relative;
         }
 
-        /* パスワード属性(type="password")でドット表示・変換無効化 */
         .answer-input {
             width: 100%;
             height: 100%;
@@ -730,7 +729,7 @@
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
 
     let questionsData = [];
-    let rawQuestionsData = []; // 追加: 登録順を保持する配列
+    let rawQuestionsData = []; // 登録順を保持する配列
     let bgImagesData = [];
     let playerCount = 5;
     let bgMode = 'order';
@@ -803,7 +802,6 @@
     function romajiToHira(str) {
         if (!str) return '';
         let s = str.toLowerCase();
-        // nnが「っん」にならないよう、促音（っ）判定の連続子音からnを除外
         s = s.replace(/([bcdfghjklmpqrstvwxz])\1/g, 'っ$1');
         for (let [rom, hira] of romajiMap) {
             s = s.replace(new RegExp(rom, 'g'), hira);
@@ -840,7 +838,6 @@
         const lsStatus = document.getElementById('lsStatus');
         lsStatus.innerText = '☁️ Supabaseから問題データを読み込んでいます...';
 
-        // 1. Supabaseのquiz_dataテーブル (five_leagueカラム) からデータ取得を試行
         try {
             const { data, error } = await supabaseClient
                 .from('quiz_data')
@@ -863,7 +860,6 @@
             console.warn('Supabaseからの読み込みに失敗、ローカルストレージを確認します:', e);
         }
 
-        // 2. Supabaseで取得できない場合はローカルストレージをフォールバックとして確認
         const possibleKeys = ['fiveLeagueData', 'fiveLeagueQuestions', 'fiveLeagueQuizData', 'quizData'];
         let found = null;
 
@@ -939,27 +935,21 @@
             return;
         }
 
-        rawQuestionsData = [...rawQuestions]; //
+        rawQuestionsData = [...rawQuestions];
         
-        // レベル判定用のヘルパー関数
         const getLevel = (q) => {
             if (q.level !== undefined && q.level !== null) return parseInt(q.level, 10);
             if (q.lv !== undefined && q.lv !== null) return parseInt(q.lv, 10);
+            if (q.difficulty !== undefined && q.difficulty !== null) return parseInt(q.difficulty, 10);
             return null;
         };
 
-        // 1. 1問目用：レベル1のみ
         let poolLv1 = rawQuestions.filter(q => getLevel(q) === 1);
-        // 2. 2問目・3問目用：レベル1またはレベル2
         let poolLv1or2 = rawQuestions.filter(q => getLevel(q) === 1 || getLevel(q) === 2);
-
-        // レベル設定がないデータが混在・不足している場合のフォールバック（全体シャッフルから補填）
-        shuffleArray(rawQuestions);
 
         questionsData = [];
         let usedIndexes = new Set();
 
-        // 1問目を選出
         if (poolLv1.length > 0) {
             shuffleArray(poolLv1);
             const q1 = poolLv1[0];
@@ -970,7 +960,6 @@
             usedIndexes.add(0);
         }
 
-        // 2問目と3問目を選出
         if (poolLv1or2.length > 0) {
             shuffleArray(poolLv1or2);
             for (let q of poolLv1or2) {
@@ -983,12 +972,14 @@
             }
         }
 
-        // 4問目以降、または指定条件の問題が足りない場合は残りの全問題から追加
+        let remaining = [];
         for (let i = 0; i < rawQuestions.length; i++) {
             if (!usedIndexes.has(i)) {
-                questionsData.push(rawQuestions[i]);
+                remaining.push(rawQuestions[i]);
             }
         }
+        shuffleArray(remaining);
+        questionsData = questionsData.concat(remaining);
 
         if (questionsData.length === 0) {
             alert('有効な問題データがありません。');
@@ -999,7 +990,7 @@
         document.getElementById('gameScreen').style.display = 'block';
 
         currentQIndex = 0;
-        gameStartTime = Date.now(); // タイマー開始
+        gameStartTime = Date.now();
         loadQuestion(currentQIndex);
     }
 
@@ -1084,7 +1075,6 @@
             gameScreen.style.backgroundImage = 'linear-gradient(135deg, #1f4037, #99f2c8)';
         }
 
-        // サマリー画面の背景も合わせる
         const summaryScreen = document.getElementById('summaryScreen');
         if (bgUrl) {
             summaryScreen.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85)), url(${bgUrl})`;
@@ -1096,9 +1086,8 @@
     function setupInputForChar() {
         document.getElementById('charStatus').innerText = `${currentCharIndex + 1}枠目`;
 
-        // 問題番号の小さめ表示（シャッフル前の元データにおける順番を表示）
         const q = questionsData[currentQIndex];
-        const originalIndex = rawQuestionsData.indexOf(q);
+        let originalIndex = rawQuestionsData.findIndex(item => item.id && q.id ? item.id === q.id : item === q);
         const qNum = originalIndex !== -1 ? originalIndex + 1 : currentQIndex + 1;
         document.getElementById('qNumberSub').innerText = `No. ${qNum}`;
 
@@ -1110,9 +1099,7 @@
         input.focus();
     }
 
-    function onInputChar(input) {
-        // パスワード入力用のUIスケール
-    }
+    function onInputChar(input) {}
 
     document.getElementById('answerInput').addEventListener('keydown', (e) => {
         if (e.key === ' ' || e.code === 'Space') {
@@ -1129,7 +1116,6 @@
         const input = document.getElementById('answerInput');
         let rawVal = input.value.trim();
 
-        // 未入力でEnterを押した場合は無条件で正解にするため、現在の枠の正解文字を取得してセット
         if (!rawVal) {
             const q = questionsData[currentQIndex];
             const furiArr = getFuriganaArray(q, false);
@@ -1205,7 +1191,6 @@
         const resultBoxes = document.querySelectorAll('.result-box');
         const q = questionsData[currentQIndex];
 
-        // 各枠（各プレイヤー）ごとに独立して判定を行う関数
         function evaluateAgainstFuriganaList(furiList) {
             let matches = [];
             let correctCount = 0;
@@ -1222,13 +1207,11 @@
             return { isAllPerfect: correctCount === 5, correctCount, matches };
         }
 
-        // 主解答の照合
         const mainFuriList = getFuriganaArray(q, false);
         let evalResult = evaluateAgainstFuriganaList(mainFuriList);
         let isPerfect = evalResult.isAllPerfect;
         let matchedAltIndex = -1;
 
-        // 別解の照合（正解数がより多くなる別解があればそれを採用）
         if (!isPerfect && q.altAnswers && q.altAnswers.length > 0) {
             for (let altIdx = 0; altIdx < q.altAnswers.length; altIdx++) {
                 const altFuriList = getFuriganaArray(q, true, altIdx);
@@ -1251,7 +1234,6 @@
 
         let allCorrect = true;
 
-        // 枠ごとに独立した判定結果に基づいて描画
         resultBoxes.forEach((box, i) => {
             box.className = 'result-box';
             const userIn = userAnswers[i] || '';
@@ -1274,7 +1256,6 @@
                     if (dummyKanjiMap[userInHira]) {
                         box.innerText = dummyKanjiMap[userInHira];
                     } else {
-                        // 漢字判定で変換不一致・不正解時は「異」ではなく入力されたひらがなを表示
                         box.innerText = userInHira;
                     }
                 } 
@@ -1289,7 +1270,6 @@
         if (!allCorrect || !isPerfect) {
             const fullAnswerStr = targetDisplayArr.join('');
 
-            // 間違えた問題情報を保持
             failedQuestionInfo = {
                 qText: q.questionText,
                 answer: fullAnswerStr,
@@ -1315,14 +1295,12 @@
                 if (currentQIndex < questionsData.length) {
                     loadQuestion(currentQIndex);
                 } else {
-                    // 全問クリア時
                     finalElapsedTime = parseFloat(((Date.now() - gameStartTime) / 1000).toFixed(2));
                     saveScoreAndShowSummary(currentQIndex, finalElapsedTime, null);
                 }
             };
             ctrlDiv.appendChild(nextBtn);
         } else {
-            // GAME OVER 時
             finalElapsedTime = parseFloat(((Date.now() - gameStartTime) / 1000).toFixed(2));
             saveScoreAndShowSummary(currentQIndex, finalElapsedTime, failedQuestionInfo);
 
@@ -1338,7 +1316,6 @@
         }
     }
 
-    // スコアの記録
     async function saveScoreAndShowSummary(score, time, failedInfo) {
         try {
             const { data, error } = await supabaseClient
@@ -1357,13 +1334,11 @@
         }
     }
 
-    // サマリー・ランキング画面の表示
     async function openSummaryScreen() {
         document.getElementById('gameScreen').style.display = 'none';
         const summaryScreen = document.getElementById('summaryScreen');
         summaryScreen.style.display = 'flex';
 
-        // 間違えた問題の情報描画
         const wrongCard = document.getElementById('wrongQuestionCard');
         if (failedQuestionInfo) {
             wrongCard.style.display = 'block';
@@ -1378,14 +1353,12 @@
                 wrongImgEl.style.display = 'none';
             }
         } else {
-            wrongCard.style.display = 'none'; // 全問正解時
+            wrongCard.style.display = 'none';
         }
 
-        // ランキング読み込み
         await loadRankings();
     }
 
-    // ランキングデータの取得と描画
     async function loadRankings() {
         const todayBody = document.getElementById('todayRankingBody');
         const totalBody = document.getElementById('totalRankingBody');
@@ -1396,7 +1369,6 @@
         todayStart.setHours(0, 0, 0, 0);
 
         try {
-            // 今日の全記録
             const { data: todayData } = await supabaseClient
                 .from('daily_records_league')
                 .select('*')
@@ -1404,7 +1376,6 @@
                 .order('five_league', { ascending: false })
                 .order('five_league_time', { ascending: true });
 
-            // 総合の全記録
             const { data: totalData } = await supabaseClient
                 .from('daily_records_league')
                 .select('*')
@@ -1427,21 +1398,18 @@
             return;
         }
 
-        // 各レコードに実際の順位情報を付与する
         const rankedList = list.map((item, index) => ({
             ...item,
             rank: index + 1
         }));
 
-        let displayList = rankedList.slice(0, 10); // 上位10件を取り出す
+        let displayList = rankedList.slice(0, 10);
 
         if (currentRecordId) {
             const myRankIndex = rankedList.findIndex(item => item.id === currentRecordId);
-            
-            // 自分が10位より下（11位以降）にランクインしている場合
             if (myRankIndex >= 10) {
                 const myRecord = rankedList[myRankIndex];
-                displayList[9] = myRecord; // 10位（インデックス9）の要素を実際の順位情報を持つ自分のデータで置き換える
+                displayList[9] = myRecord;
             }
         }
 
