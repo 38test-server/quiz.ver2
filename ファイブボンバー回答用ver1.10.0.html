@@ -572,9 +572,9 @@
 </div>
 
 <script>
-    // --- Supabase設定 ---
-    const SUPABASE_URL = 'https://wfddewnonkwxwlaihamn.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_RFILYcq2R5yx72AMhsh0JQ_Bfk1eZHA';
+    // --- Supabase設定 (GM判定ツールに合わせて統一) ---
+    const SUPABASE_URL = 'https://vnnuqbndesdemwacneqf.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_ozF0vXC-dHA_lp_tDWSKIw_MYPufRCc';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const QUIZ_DATA_ROW_ID = 'main_quiz_data';
 
@@ -967,7 +967,6 @@
         choiceSection.style.display = 'none';
 
         const isKojien = checkIsKojienType(currentQuestion);
-        // 広辞苑問題の場合は参加人数（totalPlayers）分、それ以外は全お題数
         const totalSubs = isKojien 
             ? Math.min(totalPlayers, currentQuestion.answers ? currentQuestion.answers.length : 0)
             : (currentQuestion.answers ? currentQuestion.answers.length : 0);
@@ -991,7 +990,6 @@
                 if (gameMode === 'choice' && !isKojien) {
                     choiceSection.style.display = 'block';
                 }
-                // アニメーション終了後、直ちにタイマー開始
                 startGameDirectly();
             }
         }
@@ -1155,10 +1153,10 @@
             return;
         }
 
-  // Enterキーで正解判定処理
+        // Enterキーで正解判定処理
         if (e.key === 'Enter') {
             if (gameMode === 'choice' && !isKojien && selectedSubIndex === null) {
-                return; // お題未選択時は正解処理を行わない
+                return;
             }
 
             let matchedIndex = -1;
@@ -1168,7 +1166,6 @@
                     matchedIndex = selectedSubIndex;
                 }
             } else {
-                // クラシックモード・広辞苑問題：未回答の次のインデックスを正解とする
                 for (let i = 0; i < currentQuestion.answers.length; i++) {
                     if (!solvedSubIndices.includes(i)) {
                         matchedIndex = i;
@@ -1193,7 +1190,6 @@
 
                 currentRound++;
 
-                // 目標正解数を判定（広辞苑問題なら参加人数、通常問題なら全お題数）
                 const targetCount = isKojien ? Math.min(totalPlayers, currentQuestion.answers.length) : currentQuestion.answers.length;
 
                 if (currentRound >= targetCount) {
