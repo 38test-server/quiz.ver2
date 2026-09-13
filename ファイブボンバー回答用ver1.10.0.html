@@ -720,6 +720,21 @@
 
     loadQuestions();
 
+    // 問題の目標数（◯個答えよ）を取得する補助関数
+    function getTargetCount(q) {
+        if (!q) return 5;
+        if (q.targetCount !== undefined && q.targetCount !== null && !isNaN(q.targetCount)) {
+            return parseInt(q.targetCount, 10);
+        }
+        if (q.answerCount !== undefined && q.answerCount !== null && !isNaN(q.answerCount)) {
+            return parseInt(q.answerCount, 10);
+        }
+        if (q.subQuestions && q.subQuestions.length > 0) {
+            return q.subQuestions.length;
+        }
+        return q.answers ? q.answers.length : 5;
+    }
+
     async function loadQuestions() {
         let loadedData = null;
         try {
@@ -773,8 +788,8 @@
             opt.value = idx;
             const diffStr = (q.difficulty || 'normal').toUpperCase();
             const qText = q.question || '';
-            const ansCount = q.answers ? q.answers.length : 0;
-            opt.textContent = `NO.${idx + 1} [${diffStr}] | ${qText.substring(0, 25)}${qText.length > 25 ? '...' : ''} (${ansCount}問)`;
+            const targetCount = getTargetCount(q);
+            opt.textContent = `NO.${idx + 1} [${diffStr}] | ${qText.substring(0, 25)}${qText.length > 25 ? '...' : ''} (${targetCount}問)`;
             selectQuestion.appendChild(opt);
         });
 
@@ -787,16 +802,16 @@
         if (questions.length === 0) return;
         let maxQ = 5;
         if (selectQuestion.value === 'random') {
-            maxQ = Math.min(...questions.map(q => q.answers ? q.answers.length : 0));
+            maxQ = Math.min(...questions.map(q => getTargetCount(q)));
         } else {
             const selectedQ = questions[selectQuestion.value];
-            maxQ = selectedQ.answers ? selectedQ.answers.length : 0;
+            maxQ = getTargetCount(selectedQ);
         }
         inputPlayers.max = Math.min(5, maxQ);
         if (parseInt(inputPlayers.value) > inputPlayers.max) {
             inputPlayers.value = inputPlayers.max;
         }
-        playersLimitInfo.textContent = `※1〜5人で設定可能です (選択問題の最大問数: ${maxQ})`;
+        playersLimitInfo.textContent = `※1〜5人で設定可能です (選択問題の目標正解数: ${maxQ})`;
     }
 
     function checkIsKojienType(question) {
@@ -967,9 +982,7 @@
         choiceSection.style.display = 'none';
 
         const isKojien = checkIsKojienType(currentQuestion);
-        const totalSubs = isKojien 
-            ? Math.min(totalPlayers, currentQuestion.answers ? currentQuestion.answers.length : 0)
-            : (currentQuestion.answers ? currentQuestion.answers.length : 0);
+        const totalSubs = getTargetCount(currentQuestion);
         
         let pIndex = 0;
 
@@ -998,7 +1011,7 @@
 
     function generateChoiceCards() {
         choiceGrid.innerHTML = '';
-        const numQuestions = currentQuestion.answers ? currentQuestion.answers.length : 0;
+        const numQuestions = getTargetCount(currentQuestion);
 
         for (let i = 0; i < numQuestions; i++) {
             const card = document.createElement('div');
@@ -1146,8 +1159,8 @@
             } else {
                 targetIdx = parseInt(e.key, 10) - 1; // 1〜9問目
             }
-            const totalAns = currentQuestion.answers ? currentQuestion.answers.length : 0;
-            if (targetIdx < totalAns && !solvedSubIndices.includes(targetIdx)) {
+            const totalTarget = getTargetCount(currentQuestion);
+            if (targetIdx < totalTarget && !solvedSubIndices.includes(targetIdx)) {
                 selectSubQuestion(targetIdx);
             }
             return;
@@ -1166,7 +1179,8 @@
                     matchedIndex = selectedSubIndex;
                 }
             } else {
-                for (let i = 0; i < currentQuestion.answers.length; i++) {
+                const totalAns = currentQuestion.answers ? currentQuestion.answers.length : 0;
+                for (let i = 0; i < totalAns; i++) {
                     if (!solvedSubIndices.includes(i)) {
                         matchedIndex = i;
                         break;
@@ -1190,7 +1204,7 @@
 
                 currentRound++;
 
-                const targetCount = isKojien ? Math.min(totalPlayers, currentQuestion.answers.length) : currentQuestion.answers.length;
+                const targetCount = getTargetCount(currentQuestion);
 
                 if (currentRound >= targetCount) {
                     gameOver(true);
@@ -1216,9 +1230,9 @@
     // --- ゲーム終了 ---
     async function gameOver(isClear) {
         stopTimer();
-        const totalAns = currentQuestion.answers ? currentQuestion.answers.length : 0;
-        let calculatedScore = totalAns > 0 ? Math.floor((currentRound / totalAns) * 100) : 0;
-        if (isClear && currentRound === totalAns) calculatedScore += totalAns;
+        const targetCount = getTargetCount(currentQuestion);
+        let calculatedScore = targetCount > 0 ? Math.floor((currentRound / targetCount) * 100) : 0;
+        if (isClear && currentRound === targetCount) calculatedScore += targetCount;
 
         const timeTaken = parseFloat((maxTimeLimit - remainingTime).toFixed(1));
 
@@ -1263,8 +1277,8 @@
 
     function writeResultDetails(score) {
         resultQText.textContent = currentQuestion.question;
-        const totalAns = currentQuestion.answers ? currentQuestion.answers.length : 0;
-        resultPlayers.textContent = `${currentRound} 問 / 全 ${totalAns} 問 (参加者 ${totalPlayers} 人)`;
+        const targetCount = getTargetCount(currentQuestion);
+        resultPlayers.textContent = `${currentRound} 問 / 全 ${targetCount} 問 (参加者 ${totalPlayers} 人)`;
         resultScore.textContent = `${score} pt`;
 
         incorrectAnswersList.innerHTML = '';
